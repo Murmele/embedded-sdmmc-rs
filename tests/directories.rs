@@ -40,8 +40,8 @@ fn fat16_root_directory_listing() {
     let disk = utils::make_block_device(utils::DISK_SOURCE).unwrap();
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
-    let fat16_volume = volume_mgr
-        .open_raw_volume(embedded_sdmmc::VolumeIdx(0))
+    let fat16_volume = tokio_test::block_on(volume_mgr
+        .open_raw_volume(embedded_sdmmc::VolumeIdx(0)))
         .expect("open volume 0");
     let root_dir = volume_mgr
         .open_root_dir(fat16_volume)
@@ -80,10 +80,10 @@ fn fat16_root_directory_listing() {
 
     let mut listing = Vec::new();
 
-    volume_mgr
+    tokio_test::block_on(volume_mgr
         .iterate_dir(root_dir, |d| {
             listing.push(d.clone());
-        })
+        }))
         .expect("iterate directory");
 
     assert_eq!(expected.len(), listing.len());
@@ -102,14 +102,14 @@ fn fat16_sub_directory_listing() {
     let disk = utils::make_block_device(utils::DISK_SOURCE).unwrap();
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
-    let fat16_volume = volume_mgr
-        .open_raw_volume(embedded_sdmmc::VolumeIdx(0))
+    let fat16_volume = tokio_test::block_on(volume_mgr
+        .open_raw_volume(embedded_sdmmc::VolumeIdx(0)))
         .expect("open volume 0");
     let root_dir = volume_mgr
         .open_root_dir(fat16_volume)
         .expect("open root dir");
-    let test_dir = volume_mgr
-        .open_dir(root_dir, "TEST")
+    let test_dir = tokio_test::block_on(volume_mgr
+        .open_dir(root_dir, "TEST"))
         .expect("open test dir");
 
     let expected = [
@@ -139,7 +139,7 @@ fn fat16_sub_directory_listing() {
     let mut listing = Vec::new();
     let mut count = 0;
 
-    volume_mgr
+    tokio_test::block_on(volume_mgr
         .iterate_dir(test_dir, |d| {
             if count == 0 {
                 assert!(d.name == ShortFileName::this_dir());
@@ -148,7 +148,7 @@ fn fat16_sub_directory_listing() {
             }
             count += 1;
             listing.push(d.clone());
-        })
+        }))
         .expect("iterate directory");
 
     assert_eq!(expected.len(), listing.len());
@@ -167,8 +167,8 @@ fn fat32_root_directory_listing() {
     let disk = utils::make_block_device(utils::DISK_SOURCE).unwrap();
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
-    let fat32_volume = volume_mgr
-        .open_raw_volume(embedded_sdmmc::VolumeIdx(1))
+    let fat32_volume = tokio_test::block_on(volume_mgr
+        .open_raw_volume(embedded_sdmmc::VolumeIdx(1)))
         .expect("open volume 1");
     let root_dir = volume_mgr
         .open_root_dir(fat32_volume)
@@ -207,10 +207,10 @@ fn fat32_root_directory_listing() {
 
     let mut listing = Vec::new();
 
-    volume_mgr
+    tokio_test::block_on(volume_mgr
         .iterate_dir(root_dir, |d| {
             listing.push(d.clone());
-        })
+        }))
         .expect("iterate directory");
 
     assert_eq!(expected.len(), listing.len());
@@ -229,8 +229,8 @@ fn open_dir_twice() {
     let disk = utils::make_block_device(utils::DISK_SOURCE).unwrap();
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
-    let fat32_volume = volume_mgr
-        .open_raw_volume(embedded_sdmmc::VolumeIdx(1))
+    let fat32_volume = tokio_test::block_on(volume_mgr
+        .open_raw_volume(embedded_sdmmc::VolumeIdx(1)))
         .expect("open volume 1");
 
     let root_dir = volume_mgr
@@ -242,15 +242,15 @@ fn open_dir_twice() {
         .expect("open it again");
 
     assert!(matches!(
-        volume_mgr.open_dir(root_dir, "README.TXT"),
+        tokio_test::block_on(volume_mgr.open_dir(root_dir, "README.TXT")),
         Err(embedded_sdmmc::Error::OpenedFileAsDir)
     ));
 
-    let test_dir = volume_mgr
-        .open_dir(root_dir, "TEST")
+    let test_dir = tokio_test::block_on(volume_mgr
+        .open_dir(root_dir, "TEST"))
         .expect("open test dir");
 
-    let test_dir2 = volume_mgr.open_dir(root_dir, "TEST").unwrap();
+    let test_dir2 = tokio_test::block_on(volume_mgr.open_dir(root_dir, "TEST")).unwrap();
 
     volume_mgr.close_dir(root_dir).expect("close root dir");
     volume_mgr.close_dir(test_dir).expect("close test dir");
@@ -275,15 +275,15 @@ fn open_too_many_dirs() {
         2,
     > = embedded_sdmmc::VolumeManager::new_with_limits(disk, time_source, 0x1000_0000);
 
-    let fat32_volume = volume_mgr
-        .open_raw_volume(embedded_sdmmc::VolumeIdx(1))
+    let fat32_volume = tokio_test::block_on(volume_mgr
+        .open_raw_volume(embedded_sdmmc::VolumeIdx(1)))
         .expect("open volume 1");
     let root_dir = volume_mgr
         .open_root_dir(fat32_volume)
         .expect("open root dir");
 
     assert!(matches!(
-        volume_mgr.open_dir(root_dir, "TEST"),
+        tokio_test::block_on(volume_mgr.open_dir(root_dir, "TEST")),
         Err(embedded_sdmmc::Error::TooManyOpenDirs)
     ));
 }
@@ -294,16 +294,16 @@ fn find_dir_entry() {
     let disk = utils::make_block_device(utils::DISK_SOURCE).unwrap();
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
-    let fat32_volume = volume_mgr
-        .open_raw_volume(embedded_sdmmc::VolumeIdx(1))
+    let fat32_volume = tokio_test::block_on(volume_mgr
+        .open_raw_volume(embedded_sdmmc::VolumeIdx(1)))
         .expect("open volume 1");
 
     let root_dir = volume_mgr
         .open_root_dir(fat32_volume)
         .expect("open root dir");
 
-    let dir_entry = volume_mgr
-        .find_directory_entry(root_dir, "README.TXT")
+    let dir_entry = tokio_test::block_on(volume_mgr
+        .find_directory_entry(root_dir, "README.TXT"))
         .expect("Find directory entry");
     assert!(dir_entry.attributes.is_archive());
     assert!(!dir_entry.attributes.is_directory());
@@ -313,7 +313,7 @@ fn find_dir_entry() {
     assert!(!dir_entry.attributes.is_volume());
 
     assert!(matches!(
-        volume_mgr.find_directory_entry(root_dir, "README.TXS"),
+        tokio_test::block_on(volume_mgr.find_directory_entry(root_dir, "README.TXS")),
         Err(embedded_sdmmc::Error::NotFound)
     ));
 }
@@ -324,41 +324,41 @@ fn delete_file() {
     let disk = utils::make_block_device(utils::DISK_SOURCE).unwrap();
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
-    let fat32_volume = volume_mgr
-        .open_raw_volume(embedded_sdmmc::VolumeIdx(1))
+    let fat32_volume = tokio_test::block_on(volume_mgr
+        .open_raw_volume(embedded_sdmmc::VolumeIdx(1)))
         .expect("open volume 1");
 
     let root_dir = volume_mgr
         .open_root_dir(fat32_volume)
         .expect("open root dir");
 
-    let file = volume_mgr
-        .open_file_in_dir(root_dir, "README.TXT", Mode::ReadOnly)
+    let file = tokio_test::block_on(volume_mgr
+        .open_file_in_dir(root_dir, "README.TXT", Mode::ReadOnly))
         .unwrap();
 
     assert!(matches!(
-        volume_mgr.delete_file_in_dir(root_dir, "README.TXT"),
+        tokio_test::block_on(volume_mgr.delete_file_in_dir(root_dir, "README.TXT")),
         Err(embedded_sdmmc::Error::FileAlreadyOpen)
     ));
 
     assert!(matches!(
-        volume_mgr.delete_file_in_dir(root_dir, "README2.TXT"),
+        tokio_test::block_on(volume_mgr.delete_file_in_dir(root_dir, "README2.TXT")),
         Err(embedded_sdmmc::Error::NotFound)
     ));
 
-    volume_mgr.close_file(file).unwrap();
+    tokio_test::block_on(volume_mgr.close_file(file)).unwrap();
 
-    volume_mgr
-        .delete_file_in_dir(root_dir, "README.TXT")
+    tokio_test::block_on(volume_mgr
+        .delete_file_in_dir(root_dir, "README.TXT"))
         .unwrap();
 
     assert!(matches!(
-        volume_mgr.delete_file_in_dir(root_dir, "README.TXT"),
+        tokio_test::block_on(volume_mgr.delete_file_in_dir(root_dir, "README.TXT")),
         Err(embedded_sdmmc::Error::NotFound)
     ));
 
     assert!(matches!(
-        volume_mgr.open_file_in_dir(root_dir, "README.TXT", Mode::ReadOnly),
+        tokio_test::block_on(volume_mgr.open_file_in_dir(root_dir, "README.TXT", Mode::ReadOnly)),
         Err(embedded_sdmmc::Error::NotFound)
     ));
 }
@@ -369,8 +369,8 @@ fn make_directory() {
     let disk = utils::make_block_device(utils::DISK_SOURCE).unwrap();
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
-    let fat32_volume = volume_mgr
-        .open_raw_volume(embedded_sdmmc::VolumeIdx(1))
+    let fat32_volume = tokio_test::block_on(volume_mgr
+        .open_raw_volume(embedded_sdmmc::VolumeIdx(1)))
         .expect("open volume 1");
 
     let root_dir = volume_mgr
@@ -380,15 +380,15 @@ fn make_directory() {
     let test_dir_name = ShortFileName::create_from_str("12345678.ABC").unwrap();
     let test_file_name = ShortFileName::create_from_str("ABC.TXT").unwrap();
 
-    volume_mgr
-        .make_dir_in_dir(root_dir, &test_dir_name)
+    tokio_test::block_on(volume_mgr
+        .make_dir_in_dir(root_dir, &test_dir_name))
         .unwrap();
 
-    let new_dir = volume_mgr.open_dir(root_dir, &test_dir_name).unwrap();
+    let new_dir = tokio_test::block_on(volume_mgr.open_dir(root_dir, &test_dir_name)).unwrap();
 
     let mut has_this = false;
     let mut has_parent = false;
-    volume_mgr
+    tokio_test::block_on(volume_mgr
         .iterate_dir(new_dir, |item| {
             if item.name == ShortFileName::parent_dir() {
                 has_parent = true;
@@ -405,27 +405,27 @@ fn make_directory() {
             } else {
                 panic!("Unexpected item in new dir");
             }
-        })
+        }))
         .unwrap();
     assert!(has_this);
     assert!(has_parent);
 
-    let new_file = volume_mgr
+    let new_file = tokio_test::block_on(volume_mgr
         .open_file_in_dir(
             new_dir,
             &test_file_name,
             embedded_sdmmc::Mode::ReadWriteCreate,
-        )
+        ))
         .expect("open new file");
-    volume_mgr
-        .write(new_file, b"Hello")
+    tokio_test::block_on(volume_mgr
+        .write(new_file, b"Hello"))
         .expect("write to new file");
-    volume_mgr.close_file(new_file).expect("close new file");
+    tokio_test::block_on(volume_mgr.close_file(new_file)).expect("close new file");
 
     let mut has_this = false;
     let mut has_parent = false;
     let mut has_new_file = false;
-    volume_mgr
+    tokio_test::block_on(volume_mgr
         .iterate_dir(new_dir, |item| {
             if item.name == ShortFileName::parent_dir() {
                 has_parent = true;
@@ -449,7 +449,7 @@ fn make_directory() {
             } else {
                 panic!("Unexpected item in new dir");
             }
-        })
+        }))
         .unwrap();
     assert!(has_this);
     assert!(has_parent);
@@ -462,18 +462,18 @@ fn make_directory() {
         .open_root_dir(fat32_volume)
         .expect("open root dir");
     // Check we can't make it again now it exists
-    assert!(volume_mgr
-        .make_dir_in_dir(root_dir, &test_dir_name)
+    assert!(tokio_test::block_on(volume_mgr
+        .make_dir_in_dir(root_dir, &test_dir_name))
         .is_err());
-    let new_dir = volume_mgr
-        .open_dir(root_dir, &test_dir_name)
+    let new_dir = tokio_test::block_on(volume_mgr
+        .open_dir(root_dir, &test_dir_name))
         .expect("find new dir");
-    let new_file = volume_mgr
-        .open_file_in_dir(new_dir, &test_file_name, embedded_sdmmc::Mode::ReadOnly)
+    let new_file = tokio_test::block_on(volume_mgr
+        .open_file_in_dir(new_dir, &test_file_name, embedded_sdmmc::Mode::ReadOnly))
         .expect("re-open new file");
     volume_mgr.close_dir(root_dir).expect("close root");
     volume_mgr.close_dir(new_dir).expect("close new dir");
-    volume_mgr.close_file(new_file).expect("close file");
+    tokio_test::block_on(volume_mgr.close_file(new_file)).expect("close file");
 }
 
 // ****************************************************************************

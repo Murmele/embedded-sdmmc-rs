@@ -93,7 +93,8 @@ impl From<embedded_sdmmc::SdCardError> for Error {
     }
 }
 
-fn main() -> Result<(), Error> {
+#[tokio::main]
+async fn main() -> Result<(), Error> {
     // BEGIN Fake stuff that will be replaced with real peripherals
     let spi_bus = RefCell::new(FakeSpiBus());
     let delay = FakeDelayer();
@@ -111,17 +112,17 @@ fn main() -> Result<(), Error> {
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(sdcard, time_source);
     // Try and access Volume 0 (i.e. the first partition).
     // The volume object holds information about the filesystem on that volume.
-    let mut volume0 = volume_mgr.open_volume(embedded_sdmmc::VolumeIdx(0))?;
+    let mut volume0 = volume_mgr.open_volume(embedded_sdmmc::VolumeIdx(0)).await?;
     println!("Volume 0: {:?}", volume0);
     // Open the root directory (mutably borrows from the volume).
     let mut root_dir = volume0.open_root_dir()?;
     // Open a file called "MY_FILE.TXT" in the root directory
     // This mutably borrows the directory.
-    let mut my_file = root_dir.open_file_in_dir("MY_FILE.TXT", embedded_sdmmc::Mode::ReadOnly)?;
+    let mut my_file = root_dir.open_file_in_dir("MY_FILE.TXT", embedded_sdmmc::Mode::ReadOnly).await?;
     // Print the contents of the file
     while !my_file.is_eof() {
         let mut buffer = [0u8; 32];
-        let num_read = my_file.read(&mut buffer)?;
+        let num_read = my_file.read(&mut buffer).await?;
         for b in &buffer[0..num_read] {
             print!("{}", *b as char);
         }

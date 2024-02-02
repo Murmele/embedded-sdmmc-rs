@@ -71,13 +71,13 @@ where
     /// Read from the file
     ///
     /// Returns how many bytes were read, or an error.
-    pub fn read(&mut self, buffer: &mut [u8]) -> Result<usize, crate::Error<D::Error>> {
-        self.volume_mgr.read(self.raw_file, buffer)
+    pub async fn read(&mut self, buffer: &mut [u8]) -> Result<usize, crate::Error<D::Error>> {
+        self.volume_mgr.read(self.raw_file, buffer).await
     }
 
     /// Write to the file
-    pub fn write(&mut self, buffer: &[u8]) -> Result<(), crate::Error<D::Error>> {
-        self.volume_mgr.write(self.raw_file, buffer)
+    pub async fn write(&mut self, buffer: &[u8]) -> Result<(), crate::Error<D::Error>> {
+        self.volume_mgr.write(self.raw_file, buffer).await
     }
 
     /// Check if a file is at End Of File.
@@ -125,18 +125,19 @@ where
     }
 }
 
-impl<'a, D, T, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_VOLUMES: usize> Drop
-    for File<'a, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>
-where
-    D: crate::BlockDevice,
-    T: crate::TimeSource,
-{
-    fn drop(&mut self) {
-        self.volume_mgr
-            .close_file(self.raw_file)
-            .expect("Failed to close file");
-    }
-}
+// AsyncDrop is not yet implemented
+// impl<'a, D, T, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_VOLUMES: usize> Drop
+//     for File<'a, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>
+// where
+//     D: crate::BlockDevice,
+//     T: crate::TimeSource,
+// {
+//     fn drop(&mut self) {
+//         self.volume_mgr
+//             .close_file(self.raw_file)
+//             .expect("Failed to close file");
+//     }
+// }
 
 impl<'a, D, T, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_VOLUMES: usize>
     core::fmt::Debug for File<'a, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>
