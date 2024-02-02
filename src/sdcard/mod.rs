@@ -23,18 +23,18 @@ use crate::{debug, warn};
 
 /// A dummy "CS pin" that does nothing when set high or low.
 ///
-/// Should be used when constructing an [`SpiDevice`] implementation for use with [`SdCard`].
+/// Should be used when constructing an [`SpiBus`] implementation for use with [`SdCard`].
 ///
-/// Let the [`SpiDevice`] use this dummy CS pin that does not actually do anything, and pass the
+/// Let the [`SpiBus`] use this dummy CS pin that does not actually do anything, and pass the
 /// card's real CS pin to [`SdCard`]'s constructor. This allows the driver to have more
 /// fine-grained control of how the CS pin is managed than is allowed by default using the
-/// [`SpiDevice`] trait, which is needed to implement the SD/MMC SPI communication spec correctly.
+/// [`SpiBus`] trait, which is needed to implement the SD/MMC SPI communication spec correctly.
 ///
-/// If you're not sure how to get a [`SpiDevice`], you may use one of the implementations
+/// If you're not sure how to get a [`SpiBus`], you may use one of the implementations
 /// in the [`embedded-hal-bus`] crate, providing a wrapped version of your platform's HAL-provided
 /// [`SpiBus`] and [`DelayNs`] as well as our [`DummyCsPin`] in the constructor.
 ///
-/// [`SpiDevice`]: embedded_hal_async::spi::SpiDevice
+/// [`SpiBus`]: embedded_hal_async::spi::SpiBus
 /// [`SpiBus`]: embedded_hal_async::spi::SpiBus
 /// [`DelayNs`]: embedded_hal_async::delay::DelayNs
 /// [`embedded-hal-bus`]: https://docs.rs/embedded-hal-bus
@@ -58,31 +58,31 @@ impl embedded_hal::digital::OutputPin for DummyCsPin {
 
 /// Represents an SD Card on an SPI bus.
 ///
-/// Built from an [`SpiDevice`] implementation and a Chip Select pin.
-/// Unfortunately, We need control of the chip select pin separately from the [`SpiDevice`]
+/// Built from an [`SpiBus`] implementation and a Chip Select pin.
+/// Unfortunately, We need control of the chip select pin separately from the [`SpiBus`]
 /// implementation so we can clock out some bytes without Chip Select asserted
 /// (which is necessary to make the SD card actually release the Spi bus after performing
 /// operations on it, according to the spec). To support this, we provide [`DummyCsPin`]
-/// which should be provided to your chosen [`SpiDevice`] implementation rather than the card's
+/// which should be provided to your chosen [`SpiBus`] implementation rather than the card's
 /// actual CS pin. Then provide the actual CS pin to [`SdCard`]'s constructor.
 ///
 /// All the APIs take `&self` - mutability is handled using an inner `RefCell`.
 ///
-/// [`SpiDevice`]: embedded_hal_async::spi::SpiDevice
+/// [`SpiBus`]: embedded_hal_async::spi::SpiBus
 pub struct SdCard<SPI, CS, DELAYER>
 where
-    SPI: embedded_hal_async::spi::SpiDevice<u8>,
+    SPI: embedded_hal_async::spi::SpiBus<u8>,
     CS: embedded_hal::digital::OutputPin,
-    DELAYER: embedded_hal::delay::DelayNs,
+    DELAYER: embedded_hal_async::delay::DelayNs,
 {
     inner: RefCell<SdCardInner<SPI, CS, DELAYER>>,
 }
 
 impl<SPI, CS, DELAYER> SdCard<SPI, CS, DELAYER>
 where
-    SPI: embedded_hal_async::spi::SpiDevice<u8>,
+    SPI: embedded_hal_async::spi::SpiBus<u8>,
     CS: embedded_hal::digital::OutputPin,
-    DELAYER: embedded_hal::delay::DelayNs,
+    DELAYER: embedded_hal_async::delay::DelayNs,
 {
     /// Create a new SD/MMC Card driver using a raw SPI interface.
     ///
@@ -195,9 +195,9 @@ where
 
 impl<SPI, CS, DELAYER> BlockDevice for SdCard<SPI, CS, DELAYER>
 where
-    SPI: embedded_hal_async::spi::SpiDevice<u8>,
+    SPI: embedded_hal_async::spi::SpiBus<u8>,
     CS: embedded_hal::digital::OutputPin,
-    DELAYER: embedded_hal::delay::DelayNs,
+    DELAYER: embedded_hal_async::delay::DelayNs,
 {
     type Error = Error;
 
@@ -246,9 +246,9 @@ where
 /// All the APIs required `&mut self`.
 struct SdCardInner<SPI, CS, DELAYER>
 where
-    SPI: embedded_hal_async::spi::SpiDevice<u8>,
+    SPI: embedded_hal_async::spi::SpiBus<u8>,
     CS: embedded_hal::digital::OutputPin,
-    DELAYER: embedded_hal::delay::DelayNs,
+    DELAYER: embedded_hal_async::delay::DelayNs,
 {
     spi: SPI,
     cs: CS,
@@ -259,9 +259,9 @@ where
 
 impl<SPI, CS, DELAYER> SdCardInner<SPI, CS, DELAYER>
 where
-    SPI: embedded_hal_async::spi::SpiDevice<u8>,
+    SPI: embedded_hal_async::spi::SpiBus<u8>,
     CS: embedded_hal::digital::OutputPin,
-    DELAYER: embedded_hal::delay::DelayNs,
+    DELAYER: embedded_hal_async::delay::DelayNs,
 {
     async fn read_inner(&mut self, blocks: &mut [Block], start_idx: u32) -> Result<(), Error> {
         if blocks.len() == 1 {
@@ -809,7 +809,7 @@ impl Delay {
     /// `Ok(())`.
     fn delay<T>(&mut self, delayer: &mut T, err: Error) -> Result<(), Error>
     where
-        T: embedded_hal::delay::DelayNs,
+        T: embedded_hal_async::delay::DelayNs,
     {
         if self.retries_left == 0 {
             Err(err)
