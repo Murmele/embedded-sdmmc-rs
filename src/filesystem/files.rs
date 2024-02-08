@@ -1,3 +1,6 @@
+#[cfg(feature = "embassy")]
+use embassy_futures;
+
 use crate::{
     filesystem::{ClusterId, DirEntry, SearchId},
     RawVolume, VolumeManager,
@@ -125,19 +128,19 @@ where
     }
 }
 
-// AsyncDrop is not yet implemented
-// impl<'a, D, T, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_VOLUMES: usize> Drop
-//     for File<'a, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>
-// where
-//     D: crate::BlockDevice,
-//     T: crate::TimeSource,
-// {
-//     fn drop(&mut self) {
-//         self.volume_mgr
-//             .close_file(self.raw_file)
-//             .expect("Failed to close file");
-//     }
-// }
+#[cfg(feature = "embassy")]
+impl<'a, D, T, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_VOLUMES: usize> Drop
+    for File<'a, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>
+where
+    D: crate::BlockDevice,
+    T: crate::TimeSource,
+{
+    fn drop(&mut self) {
+        embassy_futures::block_on(self.volume_mgr
+            .close_file(self.raw_file))
+            .expect("Failed to close file");
+    }
+}
 
 impl<'a, D, T, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_VOLUMES: usize>
     core::fmt::Debug for File<'a, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>
