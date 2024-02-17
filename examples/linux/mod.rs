@@ -21,13 +21,6 @@ impl<P: AsRef<Path> + Clone + std::marker::Send + std::marker::Sync> LinuxBlockD
         P: AsRef<Path>,
     {
         Ok(LinuxBlockDevice {
-            // file: RefCell::new(
-            //     OpenOptions::new()
-            //         .read(true)
-            //         .write(true)
-            //         .open(device_name)
-            //         .await?,
-            // ),
             print_blocks,
             device_name: device_name,
         })
