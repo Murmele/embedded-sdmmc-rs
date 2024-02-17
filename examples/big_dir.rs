@@ -28,14 +28,16 @@ async fn main() -> Result<(), embedded_sdmmc::Error<std::io::Error>> {
         file_num += 1;
         let file_name = format!("{}.da", file_num);
         println!("opening file {file_name} for writing");
-        let mut file = tokio_test::block_on(root_dir.open_file_in_dir(
-            file_name.as_str(),
-            embedded_sdmmc::Mode::ReadWriteCreateOrTruncate,
-        ))
-        .unwrap();
+        let mut file = root_dir
+            .open_file_in_dir(
+                file_name.as_str(),
+                embedded_sdmmc::Mode::ReadWriteCreateOrTruncate,
+            )
+            .await
+            .unwrap();
         let buf = b"hello world, from rust";
         println!("writing to file");
-        tokio_test::block_on(file.write(&buf[..])).unwrap();
+        file.write(&buf[..]).await.unwrap();
         println!("closing file");
         drop(file);
     }

@@ -56,7 +56,7 @@ async fn main() -> Result<(), Error> {
         VolumeManager::new_with_limits(lbd, Clock, 0xAA00_0000);
     let mut volume = volume_mgr.open_volume(VolumeIdx(0)).await?;
     let root_dir = volume.open_root_dir()?;
-    tokio_test::block_on(list_dir(root_dir, "/"))?;
+    list_dir(root_dir, "/").await?;
     Ok(())
 }
 

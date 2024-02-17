@@ -562,7 +562,7 @@ async fn main() -> Result<(), Error> {
 
     let mut current_volume = None;
     for volume_no in 0..4 {
-        match tokio_test::block_on(ctx.volume_mgr.open_raw_volume(VolumeIdx(volume_no))) {
+        match ctx.volume_mgr.open_raw_volume(VolumeIdx(volume_no)).await {
             Ok(volume) => {
                 println!("Volume # {}: found", volume_to_letter(volume_no));
                 match ctx.volume_mgr.open_root_dir(volume) {

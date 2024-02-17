@@ -35,7 +35,7 @@ async fn main() -> Result<(), embedded_sdmmc::Error<std::io::Error>> {
         .map_err(Error::DeviceError)?;
     let mut volume_mgr: VolumeManager<LinuxBlockDevice<_>, Clock, 8, 8, 4> =
         VolumeManager::new_with_limits(lbd, Clock, 0xAA00_0000);
-    let mut volume = tokio_test::block_on(volume_mgr.open_volume(VolumeIdx(0)))?;
+    let mut volume = volume_mgr.open_volume(VolumeIdx(0)).await?;
     let mut root_dir = volume.open_root_dir()?;
     println!("\nCreating file {}...", FILE_TO_APPEND);
     let mut f = root_dir
