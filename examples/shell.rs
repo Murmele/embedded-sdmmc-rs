@@ -182,13 +182,22 @@ struct VolumeState {
     path: Vec<String>,
 }
 
-struct Context {
-    volume_mgr: VolumeManager<LinuxBlockDevice, Clock, 8, 8, 4>,
+struct Context<
+    P: AsRef<async_std::path::Path> + Clone + std::fmt::Debug + std::marker::Send + std::marker::Sync,
+> {
+    volume_mgr: VolumeManager<LinuxBlockDevice<P>, Clock, 8, 8, 4>,
     volumes: [Option<VolumeState>; 4],
     current_volume: usize,
 }
 
-impl Context {
+impl<
+        P: AsRef<async_std::path::Path>
+            + Clone
+            + std::fmt::Debug
+            + std::marker::Send
+            + std::marker::Sync,
+    > Context<P>
+{
     fn current_path(&self) -> Vec<String> {
         let Some(s) = &self.volumes[self.current_volume] else {
             return vec![];
@@ -495,20 +504,27 @@ impl Context {
             full_path.basename().unwrap_or("."),
         ))
     }
+}
 
-    /// Convert a volume index to a letter
-    fn volume_to_letter(volume: usize) -> char {
-        match volume {
-            0 => 'A',
-            1 => 'B',
-            2 => 'C',
-            3 => 'D',
-            _ => panic!("Invalid volume ID"),
-        }
+/// Convert a volume index to a letter
+fn volume_to_letter(volume: usize) -> char {
+    match volume {
+        0 => 'A',
+        1 => 'B',
+        2 => 'C',
+        3 => 'D',
+        _ => panic!("Invalid volume ID"),
     }
 }
 
-impl Drop for Context {
+impl<
+        P: AsRef<async_std::path::Path>
+            + Clone
+            + std::fmt::Debug
+            + std::marker::Send
+            + std::marker::Sync,
+    > Drop for Context<P>
+{
     fn drop(&mut self) {
         for v in self.volumes.iter_mut() {
             if let Some(v) = v {
@@ -548,7 +564,7 @@ async fn main() -> Result<(), Error> {
     for volume_no in 0..4 {
         match tokio_test::block_on(ctx.volume_mgr.open_raw_volume(VolumeIdx(volume_no))) {
             Ok(volume) => {
-                println!("Volume # {}: found", Context::volume_to_letter(volume_no));
+                println!("Volume # {}: found", volume_to_letter(volume_no));
                 match ctx.volume_mgr.open_root_dir(volume) {
                     Ok(root_dir) => {
                         ctx.volumes[volume_no] = Some(VolumeState {
@@ -584,7 +600,7 @@ async fn main() -> Result<(), Error> {
     };
 
     loop {
-        print!("{}:/", Context::volume_to_letter(ctx.current_volume));
+        print!("{}:/", volume_to_letter(ctx.current_volume));
         print!("{}", ctx.current_path().join("/"));
         print!("> ");
         std::io::stdout().flush().unwrap();

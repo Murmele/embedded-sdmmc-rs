@@ -9,33 +9,34 @@ use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx, TimeSource, Times
 use std::cell::RefCell;
 
 #[derive(Debug)]
-pub struct LinuxBlockDevice {
-    file: RefCell<File>,
+pub struct LinuxBlockDevice<P: AsRef<Path> + Clone + std::marker::Send + std::marker::Sync> {
+    //file: RefCell<File>,
     print_blocks: bool,
+    device_name: P,
 }
 
-impl LinuxBlockDevice {
-    pub async fn new<P>(
-        device_name: P,
-        print_blocks: bool,
-    ) -> Result<LinuxBlockDevice, std::io::Error>
+impl<P: AsRef<Path> + Clone + std::marker::Send + std::marker::Sync> LinuxBlockDevice<P> {
+    pub async fn new(device_name: P, print_blocks: bool) -> Result<Self, std::io::Error>
     where
         P: AsRef<Path>,
     {
         Ok(LinuxBlockDevice {
-            file: RefCell::new(
-                OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .open(device_name)
-                    .await?,
-            ),
+            // file: RefCell::new(
+            //     OpenOptions::new()
+            //         .read(true)
+            //         .write(true)
+            //         .open(device_name)
+            //         .await?,
+            // ),
             print_blocks,
+            device_name: device_name,
         })
     }
 }
 
-impl BlockDevice for LinuxBlockDevice {
+impl<P: AsRef<Path> + Clone + std::marker::Send + std::marker::Sync> BlockDevice
+    for LinuxBlockDevice<P>
+{
     type Error = std::io::Error;
 
     async fn read(
@@ -44,15 +45,15 @@ impl BlockDevice for LinuxBlockDevice {
         start_block_idx: BlockIdx,
         reason: &str,
     ) -> Result<(), Self::Error> {
-        self.file
-            .borrow_mut()
-            .seek(SeekFrom::Start(start_block_idx.into_bytes()))
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(self.device_name.clone())
+            .await?;
+        file.seek(SeekFrom::Start(start_block_idx.into_bytes()))
             .await?;
         for block in blocks.iter_mut() {
-            self.file
-                .borrow_mut()
-                .read_exact(&mut block.contents)
-                .await?;
+            file.read_exact(&mut block.contents).await?;
             if self.print_blocks {
                 println!(
                     "Read block ({}) {:?}: {:?}",
@@ -64,12 +65,15 @@ impl BlockDevice for LinuxBlockDevice {
     }
 
     async fn write(&self, blocks: &[Block], start_block_idx: BlockIdx) -> Result<(), Self::Error> {
-        self.file
-            .borrow_mut()
-            .seek(SeekFrom::Start(start_block_idx.into_bytes()))
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(self.device_name.clone())
+            .await?;
+        file.seek(SeekFrom::Start(start_block_idx.into_bytes()))
             .await?;
         for block in blocks.iter() {
-            self.file.borrow_mut().write_all(&block.contents).await?;
+            file.write_all(&block.contents).await?;
             if self.print_blocks {
                 println!("Wrote: {:?}", &block);
             }
@@ -78,7 +82,12 @@ impl BlockDevice for LinuxBlockDevice {
     }
 
     async fn num_blocks(&self) -> Result<BlockCount, Self::Error> {
-        let num_blocks = self.file.borrow().metadata().await.unwrap().len() / 512;
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(self.device_name.clone())
+            .await?;
+        let num_blocks = file.metadata().await.unwrap().len() / 512;
         Ok(BlockCount(num_blocks as u32))
     }
 }

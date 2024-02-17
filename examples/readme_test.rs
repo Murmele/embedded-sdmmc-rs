@@ -9,28 +9,28 @@ use embedded_sdmmc::sdcard::DummyCsPin;
 
 struct FakeSpiBus();
 
-impl embedded_hal::spi::ErrorType for FakeSpiBus {
+impl embedded_hal_async::spi::ErrorType for FakeSpiBus {
     type Error = core::convert::Infallible;
 }
 
-impl embedded_hal::spi::SpiBus<u8> for FakeSpiBus {
-    fn read(&mut self, _: &mut [u8]) -> Result<(), Self::Error> {
+impl embedded_hal_async::spi::SpiBus<u8> for FakeSpiBus {
+    async fn read(&mut self, _: &mut [u8]) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn write(&mut self, _: &[u8]) -> Result<(), Self::Error> {
+    async fn write(&mut self, _: &[u8]) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn transfer(&mut self, _: &mut [u8], _: &[u8]) -> Result<(), Self::Error> {
+    async fn transfer(&mut self, _: &mut [u8], _: &[u8]) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn transfer_in_place(&mut self, _: &mut [u8]) -> Result<(), Self::Error> {
+    async fn transfer_in_place(&mut self, _: &mut [u8]) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn flush(&mut self) -> Result<(), Self::Error> {
+    async fn flush(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
 }
@@ -54,8 +54,8 @@ impl embedded_hal::digital::OutputPin for FakeCs {
 #[derive(Clone, Copy)]
 struct FakeDelayer();
 
-impl embedded_hal::delay::DelayNs for FakeDelayer {
-    fn delay_ns(&mut self, ns: u32) {
+impl embedded_hal_async::delay::DelayNs for FakeDelayer {
+    async fn delay_ns(&mut self, ns: u32) {
         std::thread::sleep(std::time::Duration::from_nanos(u64::from(ns)));
     }
 }
@@ -96,9 +96,9 @@ impl From<embedded_sdmmc::SdCardError> for Error {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     // BEGIN Fake stuff that will be replaced with real peripherals
-    let spi_bus = RefCell::new(FakeSpiBus());
+    let spi_bus = FakeSpiBus();
     let delay = FakeDelayer();
-    let sdmmc_spi = embedded_hal_bus::spi::RefCellDevice::new(&spi_bus, DummyCsPin, delay);
+    let sdmmc_spi = embedded_hal_bus::spi::ExclusiveDevice::new(spi_bus, DummyCsPin, delay);
     let sdmmc_cs = FakeCs();
     let time_source = FakeTimesource();
     // END Fake stuff that will be replaced with real peripherals
@@ -106,7 +106,7 @@ async fn main() -> Result<(), Error> {
     // Build an SD Card interface out of an SPI device, a chip-select pin and the delay object
     let sdcard = embedded_sdmmc::SdCard::new(sdmmc_spi, sdmmc_cs, delay);
     // Get the card size (this also triggers card initialisation because it's not been done yet)
-    println!("Card size is {} bytes", sdcard.num_bytes()?);
+    println!("Card size is {} bytes", sdcard.num_bytes().await?);
     // Now let's look for volumes (also known as partitions) on our block device.
     // To do this we need a Volume Manager. It will take ownership of the block device.
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(sdcard, time_source);

@@ -19,23 +19,23 @@
 //! ```rust
 //! use embedded_sdmmc::{Error, Mode, SdCard, SdCardError, TimeSource, VolumeIdx, VolumeManager};
 //!
-//! fn example<S, CS, D, T>(spi: S, cs: CS, delay: D, ts: T) -> Result<(), Error<SdCardError>>
+//! async fn example<S, CS, D, T>(spi: S, cs: CS, delay: D, ts: T) -> Result<(), Error<SdCardError>>
 //! where
-//!     S: embedded_hal::spi::SpiDevice,
+//!     S: embedded_hal_async::spi::SpiDevice,
 //!     CS: embedded_hal::digital::OutputPin,
-//!     D: embedded_hal::delay::DelayNs,
+//!     D: embedded_hal_async::delay::DelayNs,
 //!     T: TimeSource,
 //! {
 //!     let sdcard = SdCard::new(spi, cs, delay);
-//!     println!("Card size is {} bytes", sdcard.num_bytes()?);
+//!     println!("Card size is {} bytes", sdcard.num_bytes().await?);
 //!     let mut volume_mgr = VolumeManager::new(sdcard, ts);
-//!     let mut volume0 = volume_mgr.open_volume(VolumeIdx(0))?;
+//!     let mut volume0 = volume_mgr.open_volume(VolumeIdx(0)).await?;
 //!     println!("Volume 0: {:?}", volume0);
 //!     let mut root_dir = volume0.open_root_dir()?;
-//!     let mut my_file = root_dir.open_file_in_dir("MY_FILE.TXT", Mode::ReadOnly)?;
+//!     let mut my_file = root_dir.open_file_in_dir("MY_FILE.TXT", Mode::ReadOnly).await?;
 //!     while !my_file.is_eof() {
 //!         let mut buffer = [0u8; 32];
-//!         let num_read = my_file.read(&mut buffer)?;
+//!         let num_read = my_file.read(&mut buffer).await?;
 //!         for b in &buffer[0..num_read] {
 //!             print!("{}", *b as char);
 //!         }

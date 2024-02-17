@@ -35,6 +35,8 @@
 extern crate embedded_sdmmc;
 
 mod linux;
+use async_recursion::async_recursion;
+use async_std::path::Path;
 use linux::*;
 
 use embedded_sdmmc::{Directory, VolumeIdx, VolumeManager};
@@ -50,7 +52,7 @@ async fn main() -> Result<(), Error> {
     let lbd = LinuxBlockDevice::new(filename, print_blocks)
         .await
         .map_err(Error::DeviceError)?;
-    let mut volume_mgr: VolumeManager<LinuxBlockDevice, Clock, 8, 8, 4> =
+    let mut volume_mgr: VolumeManager<LinuxBlockDevice<_>, Clock, 8, 8, 4> =
         VolumeManager::new_with_limits(lbd, Clock, 0xAA00_0000);
     let mut volume = volume_mgr.open_volume(VolumeIdx(0)).await?;
     let root_dir = volume.open_root_dir()?;
@@ -61,8 +63,9 @@ async fn main() -> Result<(), Error> {
 /// Recursively print a directory listing for the open directory given.
 ///
 /// The path is for display purposes only.
-async fn list_dir(
-    mut directory: Directory<LinuxBlockDevice, Clock, 8, 8, 4>,
+#[async_recursion]
+async fn list_dir<P: AsRef<Path> + Clone + std::marker::Send + std::marker::Sync>(
+    mut directory: Directory<'async_recursion, LinuxBlockDevice<P>, Clock, 8, 8, 4>,
     path: &str,
 ) -> Result<(), Error> {
     println!("Listing {}", path);
