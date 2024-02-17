@@ -9,7 +9,6 @@ use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx, TimeSource, Times
 
 #[derive(Debug)]
 pub struct LinuxBlockDevice<P: AsRef<Path> + Clone + std::marker::Send + std::marker::Sync> {
-    //file: RefCell<File>,
     print_blocks: bool,
     device_name: P,
 }
