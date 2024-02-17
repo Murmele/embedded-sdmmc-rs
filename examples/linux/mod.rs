@@ -1,12 +1,11 @@
 //! Helpers for using embedded-sdmmc on Linux
 
-use async_std::fs::{File, OpenOptions};
+use async_std::fs::OpenOptions;
 use async_std::io::prelude::*;
 use async_std::io::SeekFrom;
 use async_std::path::Path;
 use chrono::Timelike;
 use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx, TimeSource, Timestamp};
-use std::cell::RefCell;
 
 #[derive(Debug)]
 pub struct LinuxBlockDevice<P: AsRef<Path> + Clone + std::marker::Send + std::marker::Sync> {
