@@ -297,7 +297,8 @@ where
         if blocks.len() == 1 {
             // Start a single-block write
             self.card_command(CMD24, start_idx).await?;
-            self.write_data(DATA_START_BLOCK, &blocks[0].contents).await?;
+            self.write_data(DATA_START_BLOCK, &blocks[0].contents)
+                .await?;
             self.wait_not_busy(Delay::new_write()).await?;
             if self.card_command(CMD13, 0).await? != 0x00 {
                 return Err(Error::WriteError);
@@ -317,7 +318,8 @@ where
             self.card_command(CMD25, start_idx).await?;
             for block in blocks.iter() {
                 self.wait_not_busy(Delay::new_write()).await?;
-                self.write_data(WRITE_MULTIPLE_TOKEN, &block.contents).await?;
+                self.write_data(WRITE_MULTIPLE_TOKEN, &block.contents)
+                    .await?;
             }
             // Stop the write
             self.wait_not_busy(Delay::new_write()).await?;
@@ -355,7 +357,7 @@ where
         self.cs_high()?;
         match result {
             Ok(num_blocks) => Ok(BlockCount(num_blocks)),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 
@@ -365,7 +367,7 @@ where
         match csd {
             Csd::V1(ref contents) => Ok(contents.card_capacity_bytes()),
             Csd::V2(ref contents) => Ok(contents.card_capacity_bytes()),
-        } 
+        }
     }
 
     /// Return the usable size of this SD card in bytes.
@@ -381,7 +383,7 @@ where
         match csd {
             Csd::V1(ref contents) => Ok(contents.erase_single_block_enabled()),
             Csd::V2(ref contents) => Ok(contents.erase_single_block_enabled()),
-        }  
+        }
     }
 
     /// Can this card erase single blocks?
@@ -638,7 +640,8 @@ where
     async fn transfer_byte(&mut self, out: u8) -> Result<u8, Error> {
         let mut read_buf = [0u8; 1];
         self.spi
-            .transfer(&mut read_buf, &[out]).await
+            .transfer(&mut read_buf, &[out])
+            .await
             .map_err(|_| Error::Transport)?;
         Ok(read_buf[0])
     }
@@ -652,7 +655,8 @@ where
     /// Send multiple bytes and replace them with what comes back over the SPI bus.
     async fn transfer_bytes(&mut self, in_out: &mut [u8]) -> Result<(), Error> {
         self.spi
-            .transfer_in_place(in_out).await
+            .transfer_in_place(in_out)
+            .await
             .map_err(|_e| Error::Transport)?;
         Ok(())
     }

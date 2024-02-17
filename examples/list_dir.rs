@@ -47,7 +47,9 @@ async fn main() -> Result<(), Error> {
     let mut args = std::env::args().skip(1);
     let filename = args.next().unwrap_or_else(|| "/dev/mmcblk0".into());
     let print_blocks = args.find(|x| x == "-v").map(|_| true).unwrap_or(false);
-    let lbd = LinuxBlockDevice::new(filename, print_blocks).await.map_err(Error::DeviceError)?;
+    let lbd = LinuxBlockDevice::new(filename, print_blocks)
+        .await
+        .map_err(Error::DeviceError)?;
     let mut volume_mgr: VolumeManager<LinuxBlockDevice, Clock, 8, 8, 4> =
         VolumeManager::new_with_limits(lbd, Clock, 0xAA00_0000);
     let mut volume = volume_mgr.open_volume(VolumeIdx(0)).await?;
@@ -65,25 +67,27 @@ async fn list_dir(
 ) -> Result<(), Error> {
     println!("Listing {}", path);
     let mut children = Vec::new();
-    directory.iterate_dir(|entry| {
-        println!(
-            "{:12} {:9} {} {}",
-            entry.name,
-            entry.size,
-            entry.mtime,
-            if entry.attributes.is_directory() {
-                "<DIR>"
-            } else {
-                ""
+    directory
+        .iterate_dir(|entry| {
+            println!(
+                "{:12} {:9} {} {}",
+                entry.name,
+                entry.size,
+                entry.mtime,
+                if entry.attributes.is_directory() {
+                    "<DIR>"
+                } else {
+                    ""
+                }
+            );
+            if entry.attributes.is_directory()
+                && entry.name != embedded_sdmmc::ShortFileName::parent_dir()
+                && entry.name != embedded_sdmmc::ShortFileName::this_dir()
+            {
+                children.push(entry.name.clone());
             }
-        );
-        if entry.attributes.is_directory()
-            && entry.name != embedded_sdmmc::ShortFileName::parent_dir()
-            && entry.name != embedded_sdmmc::ShortFileName::this_dir()
-        {
-            children.push(entry.name.clone());
-        }
-    }).await?;
+        })
+        .await?;
     for child_name in children {
         let child_dir = directory.open_dir(&child_name).await?;
         let child_path = if path == "/" {

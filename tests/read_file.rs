@@ -13,19 +13,21 @@ fn read_file_512_blocks() {
     let disk = utils::make_block_device(utils::DISK_SOURCE).unwrap();
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
-    let fat16_volume = tokio_test::block_on(volume_mgr
-        .open_raw_volume(embedded_sdmmc::VolumeIdx(0)))
-        .expect("open volume 0");
+    let fat16_volume =
+        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(0)))
+            .expect("open volume 0");
     let root_dir = volume_mgr
         .open_root_dir(fat16_volume)
         .expect("open root dir");
-    let test_dir = tokio_test::block_on(volume_mgr
-        .open_dir(root_dir, "TEST"))
-        .expect("Open test dir");
+    let test_dir =
+        tokio_test::block_on(volume_mgr.open_dir(root_dir, "TEST")).expect("Open test dir");
 
-    let test_file = tokio_test::block_on(volume_mgr
-        .open_file_in_dir(test_dir, "TEST.DAT", embedded_sdmmc::Mode::ReadOnly))
-        .expect("open test file");
+    let test_file = tokio_test::block_on(volume_mgr.open_file_in_dir(
+        test_dir,
+        "TEST.DAT",
+        embedded_sdmmc::Mode::ReadOnly,
+    ))
+    .expect("open test file");
 
     let mut contents = Vec::new();
 
@@ -55,24 +57,24 @@ fn read_file_all() {
     let disk = utils::make_block_device(utils::DISK_SOURCE).unwrap();
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
-    let fat16_volume = tokio_test::block_on(volume_mgr
-        .open_raw_volume(embedded_sdmmc::VolumeIdx(0)))
-        .expect("open volume 0");
+    let fat16_volume =
+        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(0)))
+            .expect("open volume 0");
     let root_dir = volume_mgr
         .open_root_dir(fat16_volume)
         .expect("open root dir");
-    let test_dir = tokio_test::block_on(volume_mgr
-        .open_dir(root_dir, "TEST"))
-        .expect("Open test dir");
+    let test_dir =
+        tokio_test::block_on(volume_mgr.open_dir(root_dir, "TEST")).expect("Open test dir");
 
-    let test_file = tokio_test::block_on(volume_mgr
-        .open_file_in_dir(test_dir, "TEST.DAT", embedded_sdmmc::Mode::ReadOnly))
-        .expect("open test file");
+    let test_file = tokio_test::block_on(volume_mgr.open_file_in_dir(
+        test_dir,
+        "TEST.DAT",
+        embedded_sdmmc::Mode::ReadOnly,
+    ))
+    .expect("open test file");
 
     let mut contents = vec![0u8; 4096];
-    let len = tokio_test::block_on(volume_mgr
-        .read(test_file, &mut contents))
-        .expect("read data");
+    let len = tokio_test::block_on(volume_mgr.read(test_file, &mut contents)).expect("read data");
     if len != 3500 {
         panic!("Failed to read all of TEST.DAT");
     }
@@ -89,19 +91,21 @@ fn read_file_prime_blocks() {
     let disk = utils::make_block_device(utils::DISK_SOURCE).unwrap();
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
-    let fat16_volume = tokio_test::block_on(volume_mgr
-        .open_raw_volume(embedded_sdmmc::VolumeIdx(0)))
-        .expect("open volume 0");
+    let fat16_volume =
+        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(0)))
+            .expect("open volume 0");
     let root_dir = volume_mgr
         .open_root_dir(fat16_volume)
         .expect("open root dir");
-    let test_dir = tokio_test::block_on(volume_mgr
-        .open_dir(root_dir, "TEST"))
-        .expect("Open test dir");
+    let test_dir =
+        tokio_test::block_on(volume_mgr.open_dir(root_dir, "TEST")).expect("Open test dir");
 
-    let test_file = tokio_test::block_on(volume_mgr
-        .open_file_in_dir(test_dir, "TEST.DAT", embedded_sdmmc::Mode::ReadOnly))
-        .expect("open test file");
+    let test_file = tokio_test::block_on(volume_mgr.open_file_in_dir(
+        test_dir,
+        "TEST.DAT",
+        embedded_sdmmc::Mode::ReadOnly,
+    ))
+    .expect("open test file");
 
     let mut contents = Vec::new();
 
@@ -132,19 +136,21 @@ fn read_file_backwards() {
     let disk = utils::make_block_device(utils::DISK_SOURCE).unwrap();
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
-    let fat16_volume = tokio_test::block_on(volume_mgr
-        .open_raw_volume(embedded_sdmmc::VolumeIdx(0)))
-        .expect("open volume 0");
+    let fat16_volume =
+        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(0)))
+            .expect("open volume 0");
     let root_dir = volume_mgr
         .open_root_dir(fat16_volume)
         .expect("open root dir");
-    let test_dir = tokio_test::block_on(volume_mgr
-        .open_dir(root_dir, "TEST"))
-        .expect("Open test dir");
+    let test_dir =
+        tokio_test::block_on(volume_mgr.open_dir(root_dir, "TEST")).expect("Open test dir");
 
-    let test_file = tokio_test::block_on(volume_mgr
-        .open_file_in_dir(test_dir, "TEST.DAT", embedded_sdmmc::Mode::ReadOnly))
-        .expect("open test file");
+    let test_file = tokio_test::block_on(volume_mgr.open_file_in_dir(
+        test_dir,
+        "TEST.DAT",
+        embedded_sdmmc::Mode::ReadOnly,
+    ))
+    .expect("open test file");
 
     let mut contents = std::collections::VecDeque::new();
 

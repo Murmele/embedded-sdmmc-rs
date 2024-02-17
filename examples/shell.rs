@@ -69,8 +69,8 @@
 //! | `B:/BACKUP.000/NAMES.CSV`   | `B:`    | Yes      | `[BACKUP.000]`     | `NAMES.CSV`    | `B:/BACKUP.000/NAMES.CSV`      |
 //! | `B:../BACKUP.000/NAMES.CSV` | `B:`    | No       | `[.., BACKUP.000]` | `NAMES.CSV`    | `B:/BACKUP.000/NAMES.CSV`      |
 
-use std::io::prelude::*;
 use async_recursion::async_recursion;
+use std::io::prelude::*;
 
 use embedded_sdmmc::{
     Error as EsError, RawDirectory, RawVolume, ShortFileName, VolumeIdx, VolumeManager,
@@ -235,7 +235,8 @@ impl Context {
                 "{:12} {:9} {} {} {:08X?} {:?}",
                 entry.name, entry.size, entry.ctime, entry.mtime, entry.cluster, entry.attributes
             );
-        }).await?;
+        })
+        .await?;
         Ok(())
     }
 
@@ -265,7 +266,8 @@ impl Context {
             {
                 children.push(entry.name.clone());
             }
-        }).await?;
+        })
+        .await?;
         // Be sure to close this, no matter what happens
         let dir = dir.to_raw_directory();
         for child in children {
@@ -323,7 +325,9 @@ impl Context {
     async fn cat(&mut self, filename: &Path) -> Result<(), Error> {
         let (dir, filename) = self.resolve_filename(filename).await?;
         let mut dir = dir.to_directory(&mut self.volume_mgr);
-        let mut f = dir.open_file_in_dir(filename, embedded_sdmmc::Mode::ReadOnly).await?;
+        let mut f = dir
+            .open_file_in_dir(filename, embedded_sdmmc::Mode::ReadOnly)
+            .await?;
         let mut data = Vec::new();
         while !f.is_eof() {
             let mut buffer = vec![0u8; 65536];
@@ -344,7 +348,9 @@ impl Context {
     async fn hexdump(&mut self, filename: &Path) -> Result<(), Error> {
         let (dir, filename) = self.resolve_filename(filename).await?;
         let mut dir = dir.to_directory(&mut self.volume_mgr);
-        let mut f = dir.open_file_in_dir(filename, embedded_sdmmc::Mode::ReadOnly).await?;
+        let mut f = dir
+            .open_file_in_dir(filename, embedded_sdmmc::Mode::ReadOnly)
+            .await?;
         let mut data = Vec::new();
         while !f.is_eof() {
             let mut buffer = vec![0u8; 65536];
@@ -428,7 +434,10 @@ impl Context {
     /// * Relative names, like `../SOMEDIR` or `./SOMEDIR`, traverse
     ///   starting at the current volume and directory.
     /// * Absolute, like `B:/SOMEDIR/OTHERDIR` start at the given volume.
-    async fn resolve_existing_directory(&mut self, full_path: &Path) -> Result<RawDirectory, Error> {
+    async fn resolve_existing_directory(
+        &mut self,
+        full_path: &Path,
+    ) -> Result<RawDirectory, Error> {
         let (dir, fragment) = self.resolve_filename(full_path).await?;
         let mut work_dir = dir.to_directory(&mut self.volume_mgr);
         work_dir.change_dir(fragment).await?;
@@ -473,7 +482,8 @@ impl Context {
         } else {
             // relative to CWD
             self.volume_mgr
-                .open_dir(s.directory, ".").await?
+                .open_dir(s.directory, ".")
+                .await?
                 .to_directory(&mut self.volume_mgr)
         };
 
@@ -523,7 +533,9 @@ async fn main() -> Result<(), Error> {
     let filename = args.next().unwrap_or_else(|| "/dev/mmcblk0".into());
     let print_blocks = args.find(|x| x == "-v").map(|_| true).unwrap_or(false);
     println!("Opening '{filename}'...");
-    let lbd = LinuxBlockDevice::new(filename, print_blocks).await.map_err(Error::DeviceError)?;
+    let lbd = LinuxBlockDevice::new(filename, print_blocks)
+        .await
+        .map_err(Error::DeviceError)?;
     let stdin = std::io::stdin();
 
     let mut ctx = Context {

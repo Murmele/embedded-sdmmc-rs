@@ -1,12 +1,12 @@
 //! Helpers for using embedded-sdmmc on Linux
 
-use chrono::Timelike;
-use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx, TimeSource, Timestamp};
-use std::cell::RefCell;
-use async_std::fs::{OpenOptions, File};
+use async_std::fs::{File, OpenOptions};
 use async_std::io::prelude::*;
 use async_std::io::SeekFrom;
 use async_std::path::Path;
+use chrono::Timelike;
+use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx, TimeSource, Timestamp};
+use std::cell::RefCell;
 
 #[derive(Debug)]
 pub struct LinuxBlockDevice {
@@ -15,7 +15,10 @@ pub struct LinuxBlockDevice {
 }
 
 impl LinuxBlockDevice {
-    pub async fn new<P>(device_name: P, print_blocks: bool) -> Result<LinuxBlockDevice, std::io::Error>
+    pub async fn new<P>(
+        device_name: P,
+        print_blocks: bool,
+    ) -> Result<LinuxBlockDevice, std::io::Error>
     where
         P: AsRef<Path>,
     {
@@ -24,7 +27,8 @@ impl LinuxBlockDevice {
                 OpenOptions::new()
                     .read(true)
                     .write(true)
-                    .open(device_name).await?,
+                    .open(device_name)
+                    .await?,
             ),
             print_blocks,
         })
@@ -42,9 +46,13 @@ impl BlockDevice for LinuxBlockDevice {
     ) -> Result<(), Self::Error> {
         self.file
             .borrow_mut()
-            .seek(SeekFrom::Start(start_block_idx.into_bytes())).await?;
+            .seek(SeekFrom::Start(start_block_idx.into_bytes()))
+            .await?;
         for block in blocks.iter_mut() {
-            self.file.borrow_mut().read_exact(&mut block.contents).await?;
+            self.file
+                .borrow_mut()
+                .read_exact(&mut block.contents)
+                .await?;
             if self.print_blocks {
                 println!(
                     "Read block ({}) {:?}: {:?}",
@@ -58,7 +66,8 @@ impl BlockDevice for LinuxBlockDevice {
     async fn write(&self, blocks: &[Block], start_block_idx: BlockIdx) -> Result<(), Self::Error> {
         self.file
             .borrow_mut()
-            .seek(SeekFrom::Start(start_block_idx.into_bytes())).await?;
+            .seek(SeekFrom::Start(start_block_idx.into_bytes()))
+            .await?;
         for block in blocks.iter() {
             self.file.borrow_mut().write_all(&block.contents).await?;
             if self.print_blocks {

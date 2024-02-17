@@ -47,13 +47,17 @@ async fn main() -> Result<(), embedded_sdmmc::Error<std::io::Error>> {
     let mut args = std::env::args().skip(1);
     let filename = args.next().unwrap_or_else(|| "/dev/mmcblk0".into());
     let print_blocks = args.find(|x| x == "-v").map(|_| true).unwrap_or(false);
-    let lbd = LinuxBlockDevice::new(filename, print_blocks).await.map_err(Error::DeviceError)?;
+    let lbd = LinuxBlockDevice::new(filename, print_blocks)
+        .await
+        .map_err(Error::DeviceError)?;
     let mut volume_mgr: VolumeManager<LinuxBlockDevice, Clock, 8, 8, 4> =
         VolumeManager::new_with_limits(lbd, Clock, 0xAA00_0000);
     let mut volume = volume_mgr.open_volume(VolumeIdx(0)).await?;
     let mut root_dir = volume.open_root_dir()?;
     println!("\nReading file {}...", FILE_TO_READ);
-    let mut f = root_dir.open_file_in_dir(FILE_TO_READ, Mode::ReadOnly).await?;
+    let mut f = root_dir
+        .open_file_in_dir(FILE_TO_READ, Mode::ReadOnly)
+        .await?;
     while !f.is_eof() {
         let mut buffer = [0u8; 16];
         let offset = f.offset();
