@@ -8,7 +8,7 @@
 pub mod proto;
 
 use crate::{trace, Block, BlockCount, BlockDevice, BlockIdx};
-use core::{cell::RefCell, future::Future, pin::Pin};
+use core::cell::RefCell;
 use proto::*;
 
 // ****************************************************************************
