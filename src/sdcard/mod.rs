@@ -428,7 +428,7 @@ where
             if s != 0xFF {
                 break s;
             }
-            delay.delay(&mut self.delayer, Error::TimeoutReadBuffer)?;
+            delay.delay(&mut self.delayer, Error::TimeoutReadBuffer).await?;
         };
         if status != DATA_START_BLOCK {
             return Err(Error::ReadError);
@@ -530,7 +530,7 @@ where
                 }
             }
 
-            delay.delay(&mut s.delayer, Error::CardNotFound)?;
+            delay.delay(&mut s.delayer, Error::CardNotFound).await?;
         }
         // Enable CRC
         debug!("Enable CRC: {}", s.options.use_crc);
@@ -553,12 +553,12 @@ where
                 card_type = CardType::SD2;
                 break 0x4000_0000;
             }
-            delay.delay(&mut s.delayer, Error::TimeoutCommand(CMD8))?;
+            delay.delay(&mut s.delayer, Error::TimeoutCommand(CMD8)).await?;
         };
 
         let mut delay = Delay::new_command();
         while s.card_acmd(ACMD41, arg).await? != R1_READY_STATE {
-            delay.delay(&mut s.delayer, Error::TimeoutACommand(ACMD41))?;
+            delay.delay(&mut s.delayer, Error::TimeoutACommand(ACMD41)).await?;
         }
 
         if card_type == CardType::SD2 {
@@ -621,7 +621,7 @@ where
             if (result & 0x80) == ERROR_OK {
                 return Ok(result);
             }
-            delay.delay(&mut self.delayer, Error::TimeoutCommand(command))?;
+            delay.delay(&mut self.delayer, Error::TimeoutCommand(command)).await?;
         }
     }
 
@@ -669,7 +669,7 @@ where
             if s == 0xFF {
                 break;
             }
-            delay.delay(&mut self.delayer, Error::TimeoutWaitNotBusy)?;
+            delay.delay(&mut self.delayer, Error::TimeoutWaitNotBusy).await?;
         }
         Ok(())
     }
@@ -811,14 +811,14 @@ impl Delay {
     /// Checks the retry counter first, and if we hit the max retry limit, the
     /// value `err` is returned. Otherwise we wait for 10us and then return
     /// `Ok(())`.
-    fn delay<T>(&mut self, delayer: &mut T, err: Error) -> Result<(), Error>
+    async fn delay<T>(&mut self, delayer: &mut T, err: Error) -> Result<(), Error>
     where
         T: embedded_hal_async::delay::DelayNs,
     {
         if self.retries_left == 0 {
             Err(err)
         } else {
-            delayer.delay_us(10);
+            delayer.delay_us(10).await;
             self.retries_left -= 1;
             Ok(())
         }
