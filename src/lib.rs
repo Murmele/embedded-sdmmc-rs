@@ -175,6 +175,8 @@ where
     VolumeStillInUse,
     /// You can't open a volume twice
     VolumeAlreadyOpen,
+    /// Volume is opened in read only mode
+    VolumeReadOnly,
     /// We can't do that yet
     Unsupported,
     /// Tried to read beyond end of file
@@ -287,18 +289,18 @@ where
     }
 }
 
-impl<'a, D, T, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_VOLUMES: usize> Drop
-    for Volume<'a, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>
-where
-    D: crate::BlockDevice,
-    T: crate::TimeSource,
-{
-    fn drop(&mut self) {
-        self.volume_mgr
-            .close_volume(self.raw_volume)
-            .expect("Failed to close volume");
-    }
-}
+// impl<'a, D, T, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_VOLUMES: usize> Drop
+//     for Volume<'a, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>
+// where
+//     D: crate::BlockDevice,
+//     T: crate::TimeSource,
+// {
+//     fn drop(&mut self) {
+//         self.volume_mgr
+//             .close_volume(self.raw_volume)
+//             .expect("Failed to close volume");
+//     }
+// }
 
 impl<'a, D, T, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_VOLUMES: usize>
     core::fmt::Debug for Volume<'a, D, T, MAX_DIRS, MAX_FILES, MAX_VOLUMES>
@@ -333,6 +335,8 @@ pub(crate) struct VolumeInfo {
     idx: VolumeIdx,
     /// What kind of volume this is
     volume_type: VolumeType,
+    /// Flag to indicate if the volume was opened as read only. If read only, files cannot be opened in write mode!
+    read_only: bool,
 }
 
 /// This enum holds the data for the various different types of filesystems we
