@@ -1,6 +1,6 @@
 //! File opening related tests
 
-use embedded_sdmmc::{Mode, VolumeIdx, VolumeManager};
+use embedded_sdmmc::{Mode, VolumeIdx, VolumeManager, VolumeOpenMode};
 
 mod utils;
 
@@ -11,7 +11,7 @@ fn append_file() {
     let mut volume_mgr: VolumeManager<utils::RamDisk<Vec<u8>>, utils::TestTimeSource, 4, 2, 1> =
         VolumeManager::new_with_limits(disk, time_source, 0xAA00_0000);
     let volume =
-        tokio_test::block_on(volume_mgr.open_raw_volume(VolumeIdx(0))).expect("open volume");
+        tokio_test::block_on(volume_mgr.open_raw_volume(VolumeIdx(0), VolumeOpenMode::ReadWrite)).expect("open volume");
     let root_dir = volume_mgr.open_root_dir(volume).expect("open root dir");
 
     // Open with string
@@ -54,6 +54,53 @@ fn append_file() {
 
     volume_mgr.close_dir(root_dir).expect("close dir");
     volume_mgr.close_volume(volume).expect("close volume");
+}
+
+#[test]
+fn flush_file() {
+    let time_source = utils::make_time_source();
+    let disk = utils::make_block_device(utils::DISK_SOURCE).unwrap();
+    let mut volume_mgr: VolumeManager<utils::RamDisk<Vec<u8>>, utils::TestTimeSource, 4, 2, 1> =
+        VolumeManager::new_with_limits(disk, time_source, 0xAA00_0000);
+    let volume = volume_mgr
+        .open_raw_volume(VolumeIdx(0), VolumeOpenMode::ReadWrite)
+        .expect("open volume");
+    let root_dir = volume_mgr.open_root_dir(volume).expect("open root dir");
+
+    // Open with string
+    let f = volume_mgr
+        .open_file_in_dir(root_dir, "README.TXT", Mode::ReadWriteTruncate)
+        .expect("open file");
+
+    // Write some data to the file
+    let test_data = vec![0xCC; 64];
+    volume_mgr.write(f, &test_data).expect("file write");
+
+    // Check that the file length is zero in the directory entry, as we haven't
+    // flushed yet
+    let entry = volume_mgr
+        .find_directory_entry(root_dir, "README.TXT")
+        .expect("find entry");
+    assert_eq!(entry.size, 0);
+
+    volume_mgr.flush_file(f).expect("flush");
+
+    // Now check the file length again after flushing
+    let entry = volume_mgr
+        .find_directory_entry(root_dir, "README.TXT")
+        .expect("find entry");
+    assert_eq!(entry.size, 64);
+
+    // Flush more writes
+    volume_mgr.write(f, &test_data).expect("file write");
+    volume_mgr.write(f, &test_data).expect("file write");
+    volume_mgr.flush_file(f).expect("flush");
+
+    // Now check the file length again, again
+    let entry = volume_mgr
+        .find_directory_entry(root_dir, "README.TXT")
+        .expect("find entry");
+    assert_eq!(entry.size, 64 * 3);
 }
 
 // ****************************************************************************

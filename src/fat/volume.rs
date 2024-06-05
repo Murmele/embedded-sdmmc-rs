@@ -55,6 +55,10 @@ pub struct FatVolume {
     /// The block the FAT starts in. Relative to start of partition (so add
     /// `self.lba_offset` before passing to volume manager)
     pub(crate) fat_start: BlockCount,
+    /// Size of the FAT table in blocks
+    pub(crate) fat_size: BlockCount,
+    /// Number of FAT tables (Normaly there are 2 which are always synchronized (backup))
+    pub(crate) fat_nums: u8,
     /// Expected number of free clusters
     pub(crate) free_clusters_count: Option<u32>,
     /// Number of the next expected free cluster
@@ -453,7 +457,7 @@ impl FatVolume {
         &self,
         block_device: &D,
         dir: &DirectoryInfo,
-        mut func: F,
+        func: F,
     ) -> Result<(), Error<D::Error>>
     where
         F: FnMut(&DirEntry),
@@ -461,104 +465,122 @@ impl FatVolume {
     {
         match &self.fat_specific_info {
             FatSpecificInfo::Fat16(fat16_info) => {
-                // Root directories on FAT16 have a fixed size, because they use
-                // a specially reserved space on disk (see
-                // `first_root_dir_block`). Other directories can have any size
-                // as they are made of regular clusters.
-                let mut current_cluster = Some(dir.cluster);
-                let mut first_dir_block_num = match dir.cluster {
-                    ClusterId::ROOT_DIR => self.lba_start + fat16_info.first_root_dir_block,
-                    _ => self.cluster_to_block(dir.cluster),
-                };
-                let dir_size = match dir.cluster {
-                    ClusterId::ROOT_DIR => {
-                        let len_bytes =
-                            u32::from(fat16_info.root_entries_count) * OnDiskDirEntry::LEN_U32;
-                        BlockCount::from_bytes(len_bytes)
-                    }
-                    _ => BlockCount(u32::from(self.blocks_per_cluster)),
-                };
-
-                let mut block_cache = BlockCache::empty();
-                while let Some(cluster) = current_cluster {
-                    for block_idx in first_dir_block_num.range(dir_size) {
-                        let block = block_cache
-                            .read(block_device, block_idx, "read_dir")
-                            .await?;
-                        for entry in 0..Block::LEN / OnDiskDirEntry::LEN {
-                            let start = entry * OnDiskDirEntry::LEN;
-                            let end = (entry + 1) * OnDiskDirEntry::LEN;
-                            let dir_entry = OnDiskDirEntry::new(&block[start..end]);
-                            if dir_entry.is_end() {
-                                // Can quit early
-                                return Ok(());
-                            } else if dir_entry.is_valid() && !dir_entry.is_lfn() {
-                                // Safe, since Block::LEN always fits on a u32
-                                let start = u32::try_from(start).unwrap();
-                                let entry = dir_entry.get_entry(FatType::Fat16, block_idx, start);
-                                func(&entry);
-                            }
-                        }
-                    }
-                    if cluster != ClusterId::ROOT_DIR {
-                        current_cluster = match self
-                            .next_cluster(block_device, cluster, &mut block_cache)
-                            .await
-                        {
-                            Ok(n) => {
-                                first_dir_block_num = self.cluster_to_block(n);
-                                Some(n)
-                            }
-                            _ => None,
-                        };
-                    } else {
-                        current_cluster = None;
-                    }
-                }
-                Ok(())
+                self.iterate_fat16(dir, fat16_info, block_device, func).await
             }
             FatSpecificInfo::Fat32(fat32_info) => {
-                // All directories on FAT32 have a cluster chain but the root
-                // dir starts in a specified cluster.
-                let mut current_cluster = match dir.cluster {
-                    ClusterId::ROOT_DIR => Some(fat32_info.first_root_dir_cluster),
-                    _ => Some(dir.cluster),
-                };
-                let mut blocks = [Block::new()];
-                let mut block_cache = BlockCache::empty();
-                while let Some(cluster) = current_cluster {
-                    let block_idx = self.cluster_to_block(cluster);
-                    for block in block_idx.range(BlockCount(u32::from(self.blocks_per_cluster))) {
-                        block_device
-                            .read(&mut blocks, block, "read_dir")
-                            .await
-                            .map_err(Error::DeviceError)?;
-                        for entry in 0..Block::LEN / OnDiskDirEntry::LEN {
-                            let start = entry * OnDiskDirEntry::LEN;
-                            let end = (entry + 1) * OnDiskDirEntry::LEN;
-                            let dir_entry = OnDiskDirEntry::new(&blocks[0][start..end]);
-                            if dir_entry.is_end() {
-                                // Can quit early
-                                return Ok(());
-                            } else if dir_entry.is_valid() && !dir_entry.is_lfn() {
-                                // Safe, since Block::LEN always fits on a u32
-                                let start = u32::try_from(start).unwrap();
-                                let entry = dir_entry.get_entry(FatType::Fat32, block, start);
-                                func(&entry);
-                            }
-                        }
-                    }
-                    current_cluster = match self
-                        .next_cluster(block_device, cluster, &mut block_cache)
-                        .await
-                    {
-                        Ok(n) => Some(n),
-                        _ => None,
-                    };
-                }
-                Ok(())
+                self.iterate_fat32(dir, fat32_info, block_device, func).await
             }
         }
+    }
+
+    async fn iterate_fat16<D, F>(
+        &self,
+        dir: &DirectoryInfo,
+        fat16_info: &Fat16Info,
+        block_device: &D,
+        mut func: F,
+    ) -> Result<(), Error<D::Error>>
+    where
+        F: FnMut(&DirEntry),
+        D: BlockDevice,
+    {
+        // Root directories on FAT16 have a fixed size, because they use
+        // a specially reserved space on disk (see
+        // `first_root_dir_block`). Other directories can have any size
+        // as they are made of regular clusters.
+        let mut current_cluster = Some(dir.cluster);
+        let mut first_dir_block_num = match dir.cluster {
+            ClusterId::ROOT_DIR => self.lba_start + fat16_info.first_root_dir_block,
+            _ => self.cluster_to_block(dir.cluster),
+        };
+        let dir_size = match dir.cluster {
+            ClusterId::ROOT_DIR => {
+                let len_bytes = u32::from(fat16_info.root_entries_count) * OnDiskDirEntry::LEN_U32;
+                BlockCount::from_bytes(len_bytes)
+            }
+            _ => BlockCount(u32::from(self.blocks_per_cluster)),
+        };
+
+        let mut block_cache = BlockCache::empty();
+        while let Some(cluster) = current_cluster {
+            for block_idx in first_dir_block_num.range(dir_size) {
+                let block = block_cache.read(block_device, block_idx, "read_dir").await?;
+                for entry in 0..Block::LEN / OnDiskDirEntry::LEN {
+                    let start = entry * OnDiskDirEntry::LEN;
+                    let end = (entry + 1) * OnDiskDirEntry::LEN;
+                    let dir_entry = OnDiskDirEntry::new(&block[start..end]);
+                    if dir_entry.is_end() {
+                        // Can quit early
+                        return Ok(());
+                    } else if dir_entry.is_valid() && !dir_entry.is_lfn() {
+                        // Safe, since Block::LEN always fits on a u32
+                        let start = u32::try_from(start).unwrap();
+                        let entry = dir_entry.get_entry(FatType::Fat16, block_idx, start);
+                        func(&entry);
+                    }
+                }
+            }
+            if cluster != ClusterId::ROOT_DIR {
+                current_cluster = match self.next_cluster(block_device, cluster, &mut block_cache).await {
+                    Ok(n) => {
+                        first_dir_block_num = self.cluster_to_block(n);
+                        Some(n)
+                    }
+                    _ => None,
+                };
+            } else {
+                current_cluster = None;
+            }
+        }
+        Ok(())
+    }
+
+    async fn iterate_fat32<D, F>(
+        &self,
+        dir: &DirectoryInfo,
+        fat32_info: &Fat32Info,
+        block_device: &D,
+        mut func: F,
+    ) -> Result<(), Error<D::Error>>
+    where
+        F: FnMut(&DirEntry),
+        D: BlockDevice,
+    {
+        // All directories on FAT32 have a cluster chain but the root
+        // dir starts in a specified cluster.
+        let mut current_cluster = match dir.cluster {
+            ClusterId::ROOT_DIR => Some(fat32_info.first_root_dir_cluster),
+            _ => Some(dir.cluster),
+        };
+        let mut blocks = [Block::new()];
+        let mut block_cache = BlockCache::empty();
+        while let Some(cluster) = current_cluster {
+            let block_idx = self.cluster_to_block(cluster);
+            for block in block_idx.range(BlockCount(u32::from(self.blocks_per_cluster))) {
+                block_device
+                    .read(&mut blocks, block, "read_dir").await
+                    .map_err(Error::DeviceError)?;
+                for entry in 0..Block::LEN / OnDiskDirEntry::LEN {
+                    let start = entry * OnDiskDirEntry::LEN;
+                    let end = (entry + 1) * OnDiskDirEntry::LEN;
+                    let dir_entry = OnDiskDirEntry::new(&blocks[0][start..end]);
+                    if dir_entry.is_end() {
+                        // Can quit early
+                        return Ok(());
+                    } else if dir_entry.is_valid() && !dir_entry.is_lfn() {
+                        // Safe, since Block::LEN always fits on a u32
+                        let start = u32::try_from(start).unwrap();
+                        let entry = dir_entry.get_entry(FatType::Fat32, block, start);
+                        func(&entry);
+                    }
+                }
+            }
+            current_cluster = match self.next_cluster(block_device, cluster, &mut block_cache).await {
+                Ok(n) => Some(n),
+                _ => None,
+            };
+        }
+        Ok(())
     }
 
     /// Get an entry from the given directory
@@ -1127,6 +1149,8 @@ where
                 blocks_per_cluster: bpb.blocks_per_cluster(),
                 first_data_block: (first_data_block),
                 fat_start: BlockCount(u32::from(bpb.reserved_block_count())),
+                fat_size: BlockCount(bpb.fat_size()),
+                fat_nums: bpb.num_fats(),
                 free_clusters_count: None,
                 next_free_cluster: None,
                 cluster_count: bpb.total_clusters(),
@@ -1165,6 +1189,8 @@ where
                 blocks_per_cluster: bpb.blocks_per_cluster(),
                 first_data_block: BlockCount(first_data_block),
                 fat_start: BlockCount(u32::from(bpb.reserved_block_count())),
+                fat_size: BlockCount(bpb.fat_size()),
+                fat_nums: bpb.num_fats(),
                 free_clusters_count: info_sector.free_clusters_count(),
                 next_free_cluster: info_sector.next_free_cluster(),
                 cluster_count: bpb.total_clusters(),

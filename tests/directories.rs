@@ -1,6 +1,6 @@
 //! Directory related tests
 
-use embedded_sdmmc::{Mode, ShortFileName};
+use embedded_sdmmc::{Mode, ShortFileName, VolumeOpenMode};
 
 mod utils;
 
@@ -41,7 +41,7 @@ fn fat16_root_directory_listing() {
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
     let fat16_volume =
-        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(0)))
+        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(0), VolumeOpenMode::ReadWrite))
             .expect("open volume 0");
     let root_dir = volume_mgr
         .open_root_dir(fat16_volume)
@@ -102,7 +102,7 @@ fn fat16_sub_directory_listing() {
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
     let fat16_volume =
-        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(0)))
+        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(0), VolumeOpenMode::ReadWrite))
             .expect("open volume 0");
     let root_dir = volume_mgr
         .open_root_dir(fat16_volume)
@@ -165,7 +165,7 @@ fn fat32_root_directory_listing() {
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
     let fat32_volume =
-        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(1)))
+        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(1), VolumeOpenMode::ReadWrite))
             .expect("open volume 1");
     let root_dir = volume_mgr
         .open_root_dir(fat32_volume)
@@ -226,7 +226,7 @@ fn open_dir_twice() {
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
     let fat32_volume =
-        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(1)))
+        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(1), VolumeOpenMode::ReadWrite))
             .expect("open volume 1");
 
     let root_dir = volume_mgr
@@ -271,7 +271,7 @@ fn open_too_many_dirs() {
     > = embedded_sdmmc::VolumeManager::new_with_limits(disk, time_source, 0x1000_0000);
 
     let fat32_volume =
-        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(1)))
+        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(1), VolumeOpenMode::ReadWrite))
             .expect("open volume 1");
     let root_dir = volume_mgr
         .open_root_dir(fat32_volume)
@@ -290,7 +290,7 @@ fn find_dir_entry() {
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
     let fat32_volume =
-        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(1)))
+        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(1), VolumeOpenMode::ReadWrite))
             .expect("open volume 1");
 
     let root_dir = volume_mgr
@@ -319,7 +319,7 @@ fn delete_file() {
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
     let fat32_volume =
-        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(1)))
+        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(1), VolumeOpenMode::ReadWrite))
             .expect("open volume 1");
 
     let root_dir = volume_mgr
@@ -362,7 +362,7 @@ fn make_directory() {
     let mut volume_mgr = embedded_sdmmc::VolumeManager::new(disk, time_source);
 
     let fat32_volume =
-        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(1)))
+        tokio_test::block_on(volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(1), VolumeOpenMode::ReadWrite))
             .expect("open volume 1");
 
     let root_dir = volume_mgr
