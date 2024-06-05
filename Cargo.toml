@@ -13,7 +13,8 @@ version = "0.6.0"
 [dependencies]
 byteorder = {version = "1", default-features = false}
 defmt = {version = "0.3", optional = true}
-embedded-hal = "1.0.0"
+embedded-hal = { version = "1.0"}
+embedded-hal-async = { version = "1.0", default-features = false }
 heapless = "0.7"
 log = {version = "0.4", default-features = false, optional = true}
 
@@ -23,7 +24,11 @@ hex-literal = "0.4.1"
 flate2 = "1.0"
 sha2 = "0.10"
 chrono = "0.4"
-embedded-hal-bus = "0.1.0"
+embedded-hal-bus = {version = "0.1.0", features = ["async"]}
+tokio-test = "*"
+tokio = {version = "1.35.1", features = ["full"] }
+async-recursion = "1.0.5"
+async-std = "1.12.0"
 
 [features]
 default = ["log"]

@@ -71,13 +71,13 @@ where
     /// Read from the file
     ///
     /// Returns how many bytes were read, or an error.
-    pub fn read(&mut self, buffer: &mut [u8]) -> Result<usize, crate::Error<D::Error>> {
-        self.volume_mgr.read(self.raw_file, buffer)
+    pub async fn read(&mut self, buffer: &mut [u8]) -> Result<usize, crate::Error<D::Error>> {
+        self.volume_mgr.read(self.raw_file, buffer).await
     }
 
     /// Write to the file
-    pub fn write(&mut self, buffer: &[u8]) -> Result<(), crate::Error<D::Error>> {
-        self.volume_mgr.write(self.raw_file, buffer)
+    pub async fn write(&mut self, buffer: &[u8]) -> Result<(), crate::Error<D::Error>> {
+        self.volume_mgr.write(self.raw_file, buffer).await
     }
 
     /// Check if a file is at End Of File.
@@ -134,6 +134,7 @@ where
     fn drop(&mut self) {
         self.volume_mgr
             .close_file(self.raw_file)
+            .await
             .expect("Failed to close file");
     }
 }

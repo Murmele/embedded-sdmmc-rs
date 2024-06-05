@@ -45,11 +45,15 @@ pub trait BlockDevice {
         blocks: &mut [Block],
         start_block_idx: BlockIdx,
         reason: &str,
-    ) -> Result<(), Self::Error>;
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>>;
     /// Write one or more blocks, starting at the given block index.
-    fn write(&self, blocks: &[Block], start_block_idx: BlockIdx) -> Result<(), Self::Error>;
+    fn write(
+        &self,
+        blocks: &[Block],
+        start_block_idx: BlockIdx,
+    ) -> impl core::future::Future<Output = Result<(), Self::Error>>;
     /// Determine how many blocks this device can hold.
-    fn num_blocks(&self) -> Result<BlockCount, Self::Error>;
+    fn num_blocks(&self) -> impl core::future::Future<Output = Result<BlockCount, Self::Error>>;
 }
 
 impl Block {
@@ -149,7 +153,7 @@ impl core::fmt::Debug for Block {
             }
             write!(fmt, " ")?;
             for &b in line {
-                if (0x20..=0x7F).contains(&b) {
+                if b >= 0x20 && b <= 0x7F {
                     write!(fmt, "{}", b as char)?;
                 } else {
                     write!(fmt, ".")?;
