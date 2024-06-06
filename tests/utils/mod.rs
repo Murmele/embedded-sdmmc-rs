@@ -76,6 +76,10 @@ impl<T> RamDisk<T> {
             contents: std::cell::RefCell::new(contents),
         }
     }
+
+    pub fn content(&self) -> std::cell::Ref<'_, T> {
+        return self.contents.borrow();
+    }
 }
 
 impl<T> BlockDevice for RamDisk<T>
@@ -143,10 +147,23 @@ fn unpack_disk(gzip_bytes: &[u8]) -> Result<Vec<u8>, Error> {
     Ok(output)
 }
 
+pub fn pack_disk(buf: &[u8]) -> &'static str {
+    //let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    //encoder.write_all(buf).unwrap();
+    //let res = encoder.finish().unwrap();
+    let mut f = std::fs::File::create("DISK1.img").unwrap();
+    f.write_all(buf).unwrap();
+    return "DISK1.img";
+}
+
 /// Turn some gzipped bytes into a block device,
 pub fn make_block_device(gzip_bytes: &[u8]) -> Result<RamDisk<Vec<u8>>, Error> {
     let data = unpack_disk(gzip_bytes)?;
     Ok(RamDisk::new(data))
+}
+
+pub fn make_block_device_no_zip(bytes: &Vec<u8>) -> RamDisk<Vec<u8>> {
+    RamDisk::new(bytes.to_vec())
 }
 
 pub struct TestTimeSource {

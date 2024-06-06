@@ -42,7 +42,8 @@ pub struct VolumeManager<
     T: TimeSource,
     <D as BlockDevice>::Error: core::fmt::Debug,
 {
-    pub(crate) block_device: D,
+    /// test
+    pub block_device: D,
     pub(crate) time_source: T,
     id_generator: SearchIdGenerator,
     open_volumes: Vec<VolumeInfo, MAX_VOLUMES>,
