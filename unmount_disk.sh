@@ -2,3 +2,4 @@
 
 sudo umount /dev/loop0
 sudo losetup -d /dev/loop0
+#rm DISK1.img
