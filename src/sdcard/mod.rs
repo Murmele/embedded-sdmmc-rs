@@ -689,15 +689,14 @@ where
         loop {
             let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitOkLoop);
             {
-                delay
-                    .delay(&mut self.delayer, Error::TimeoutCommand(command))
-                    .await?;
-
                 let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitOkLoopReadByte);
                 let result = self.read_byte().await?;
                 if (result & 0x80) == ERROR_OK {
                     return Ok(result);
                 }
+                delay
+                    .delay(&mut self.delayer, Error::TimeoutCommand(command))
+                    .await?;
             }
         }
     }
