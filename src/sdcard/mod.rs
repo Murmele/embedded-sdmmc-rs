@@ -657,7 +657,7 @@ where
         // Get first non-FF byte.
         let mut delay = Delay::new_read();
         let status = loop {
-            let _m = Marker::new(Markers::SDCardReadInnerFirstFFByte);
+            // let _m = Marker::new(Markers::SDCardReadInnerFirstFFByte);
             let s = self.read_byte().await?;
             if s != 0xFF {
                 break s;
@@ -674,7 +674,7 @@ where
             *b = 0xFF;
         }
         {
-            let _m = Marker::new(Markers::SDCardReadInnerTransferBuffer);
+            // let _m = Marker::new(Markers::SDCardReadInnerTransferBuffer);
             self.transfer_bytes(buffer).await?;
         }
 
@@ -838,7 +838,7 @@ where
     /// Perform a command.
     async fn card_command(&mut self, command: u8, arg: u32) -> Result<u8, Error> {
         if command != CMD0 && command != CMD12 {
-            let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitNotBusy);
+            // let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitNotBusy);
             self.wait_not_busy(Delay::new_command()).await?;
         }
 
@@ -853,22 +853,22 @@ where
         buf[5] = crc7(&buf[0..5]);
 
         {
-            let _m = Marker::new(Markers::SDCardReadInnerCardCommandWriteInfo);
+            // let _m = Marker::new(Markers::SDCardReadInnerCardCommandWriteInfo);
             self.write_bytes(&buf).await?;
         }
 
         // skip stuff byte for stop read
-        let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitReady);
+        // let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitReady);
         if command == CMD12 {
             let _result = self.read_byte().await?;
         }
 
         let mut delay = Delay::new_command();
-        let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitOk);
+        // let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitOk);
         loop {
-            let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitOkLoop);
+            // let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitOkLoop);
             {
-                let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitOkLoopReadByte);
+                // let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitOkLoopReadByte);
                 let result = self.read_byte().await?;
                 if (result & 0x80) == ERROR_OK {
                     return Ok(result);
