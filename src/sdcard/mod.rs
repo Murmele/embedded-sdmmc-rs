@@ -503,23 +503,12 @@ where
                 return Err(Error::WriteError);
             }
         } else {
-            // > It is recommended using this command preceding CMD25, some of the cards will be faster for Multiple
-            // > Write Blocks operation. Note that the host should send ACMD23 just before WRITE command if the host
-            // > wants to use the pre-erased feature
-            self.card_acmd(ACMD23, blocks.len() as u32).await?;
-            // wait for card to be ready before sending the next command
-            self.wait_not_busy(Delay::new_write()).await?;
-
-            // Start a multi-block write
-            self.card_command(CMD25, start_idx).await?;
+            self.prepare_inner_multiblock_write(start_idx, blocks.len() as u32)
+                .await?;
             for block in blocks.iter() {
-                self.wait_not_busy(Delay::new_write()).await?;
-                self.write_data(WRITE_MULTIPLE_TOKEN, &block.contents)
-                    .await?;
+                self.write_inner_block(&block.contents).await?;
             }
-            // Stop the write
-            self.wait_not_busy(Delay::new_write()).await?;
-            self.write_byte(STOP_TRAN_TOKEN).await?;
+            self.end_inner_multiblock_write().await?
         }
         Ok(())
     }
