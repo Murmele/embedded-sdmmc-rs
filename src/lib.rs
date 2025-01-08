@@ -98,10 +98,7 @@ pub use crate::sdcard::Error as SdCardError;
 pub use crate::sdcard::SdCard;
 
 #[doc(inline)]
-pub use crate::sdcard::SdCardMultiBlockRead;
-
-#[doc(inline)]
-pub use crate::sdcard::SdCardMultiBlockWrite;
+pub use crate::sdcard::SdCardMultiBlockWriteRead;
 
 mod volume_mgr;
 #[doc(inline)]

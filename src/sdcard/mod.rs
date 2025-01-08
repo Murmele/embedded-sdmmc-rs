@@ -26,6 +26,7 @@ enum Markers {
     SDCardReadInnerCardCommandWaitOkLoop = 15,
     SDCardReadInnerCardCommandWaitOkLoopReadByte = 16,
     SDCardReadInnerFirstFFByte = 17,
+    SDCardReadMultiblock = 18,
 }
 
 struct Marker {
@@ -103,118 +104,117 @@ impl embedded_hal::digital::OutputPin for DummyCsPin {
     }
 }
 
+#[derive(PartialEq)]
+enum State {
+    Init,
+    Read,
+    Write,
+}
+
 /// Represents an object which is able to read multiple blocks from the sd card
-pub struct SdCardMultiBlockRead<SPI, CS, DELAYER>
+pub struct SdCardMultiBlockWriteRead<SPI, CS, DELAYER>
 where
     SPI: embedded_hal_async::spi::SpiDevice<u8>,
     CS: embedded_hal::digital::OutputPin,
     DELAYER: embedded_hal_async::delay::DelayNs,
 {
-    sd_card: Option<SdCard<SPI, CS, DELAYER>>,
+    /// Sd card
+    pub sd_card: SdCard<SPI, CS, DELAYER>,
+    marker: Marker,
+    state: State,
 }
 
-impl<SPI, CS, DELAYER> SdCardMultiBlockRead<SPI, CS, DELAYER>
+impl<SPI, CS, DELAYER> SdCardMultiBlockWriteRead<SPI, CS, DELAYER>
 where
     SPI: embedded_hal_async::spi::SpiDevice<u8>,
     CS: embedded_hal::digital::OutputPin,
     DELAYER: embedded_hal_async::delay::DelayNs,
 {
     /// Create new object
-    pub async fn new(
-        sd_card: Option<SdCard<SPI, CS, DELAYER>>,
-        start_block_idx: BlockIdx,
-    ) -> Result<Self, Error> {
-        if let Some(sd_card) = &sd_card {
-            let mut inner = sd_card.inner.borrow_mut();
-            inner.check_init().await?;
-            inner.prepare_read(start_block_idx).await?;
-            drop(inner);
+    pub fn new(sd_card: SdCard<SPI, CS, DELAYER>) -> Self {
+        Self {
+            sd_card,
+            marker: Marker::new(Markers::SDCardReadMultiblock),
+            state: State::Init,
         }
-        Ok(Self { sd_card })
+    }
+
+    /// Prepare reading from the sd card
+    pub async fn prepare_read(&mut self, start_block_idx: BlockIdx) -> Result<(), Error> {
+        let mut inner = self.sd_card.inner.borrow_mut();
+        inner.check_init().await?;
+        inner.prepare_read(start_block_idx).await?;
+        self.state = State::Read;
+        Ok(())
     }
 
     /// Reading next block
     pub async fn read(&mut self, block: &mut [u8]) -> Result<(), Error> {
-        if let Some(sd_card) = &self.sd_card {
-            let mut inner = sd_card.inner.borrow_mut();
-            inner.read_data(block).await
+        if self.state != State::Read {
+            return Err(Error::BadState);
+        }
+        let mut inner = self.sd_card.inner.borrow_mut();
+        let res = inner.read_data(block).await;
+        drop(inner);
+        if res.is_err() {
+            self.state = State::Init;
+            self.stop_read().await
         } else {
-            Err(Error::BadState)
+            res
         }
     }
 
     /// Ending a multiblock read
     /// IMPORTANT: This function must be called before destroying this object!
-    pub async fn stop(&mut self) -> Result<(), Error> {
-        if let Some(sd_card) = &self.sd_card {
-            let mut inner = sd_card.inner.borrow_mut();
-            inner.end_read().await
-        } else {
-            Err(Error::BadState)
+    pub async fn stop_read(&mut self) -> Result<(), Error> {
+        if self.state != State::Read {
+            return Err(Error::BadState);
         }
+        let mut inner = self.sd_card.inner.borrow_mut();
+        let res = inner.end_read().await;
+        self.state = State::Init;
+        res
     }
 
-    /// Get sd card back
-    pub fn take(&mut self) -> Option<SdCard<SPI, CS, DELAYER>> {
-        self.sd_card.take()
-    }
-}
-
-/// Represents an object which is able to write multiple blocks to the sd card
-pub struct SdCardMultiBlockWrite<SPI, CS, DELAYER>
-where
-    SPI: embedded_hal_async::spi::SpiDevice<u8>,
-    CS: embedded_hal::digital::OutputPin,
-    DELAYER: embedded_hal_async::delay::DelayNs,
-{
-    sd_card: Option<SdCard<SPI, CS, DELAYER>>,
-}
-
-impl<SPI, CS, DELAYER> SdCardMultiBlockWrite<SPI, CS, DELAYER>
-where
-    SPI: embedded_hal_async::spi::SpiDevice<u8>,
-    CS: embedded_hal::digital::OutputPin,
-    DELAYER: embedded_hal_async::delay::DelayNs,
-{
-    /// Create new object
-    pub async fn new(
-        sd_card: Option<SdCard<SPI, CS, DELAYER>>,
+    /// Prepare writing to the sd card
+    pub async fn prepare_write(
+        &mut self,
         start_block_idx: BlockIdx,
         blocks_length: u32,
-    ) -> Result<Self, Error> {
-        if let Some(sd_card) = &sd_card {
-            let mut inner = sd_card.inner.borrow_mut();
-            inner.check_init().await?;
-            inner.prepare_write(start_block_idx, blocks_length).await?;
-            drop(inner);
-        }
-        Ok(Self { sd_card })
+    ) -> Result<(), Error> {
+        let mut inner = self.sd_card.inner.borrow_mut();
+        inner.check_init().await?;
+        inner.prepare_write(start_block_idx, blocks_length).await?;
+        self.state = State::Write;
+        Ok(())
     }
 
     /// Writing a single block
     pub async fn write(&mut self, block: &[u8]) -> Result<(), Error> {
-        if let Some(sd_card) = &self.sd_card {
-            let mut inner = sd_card.inner.borrow_mut();
-            inner.write_inner_block(block).await
+        if self.state != State::Write {
+            return Err(Error::BadState);
+        }
+        let mut inner = self.sd_card.inner.borrow_mut();
+        let res = inner.write_inner_block(block).await;
+        drop(inner);
+        if res.is_err() {
+            self.state = State::Init;
+            self.stop_write().await
         } else {
-            Err(Error::BadState)
+            res
         }
     }
 
     /// Ending a multiblock write
     /// IMPORTANT: This function must be called before destroying this object!
-    pub async fn stop(&mut self) -> Result<(), Error> {
-        if let Some(sd_card) = &self.sd_card {
-            let mut inner = sd_card.inner.borrow_mut();
-            inner.end_write().await
-        } else {
-            Err(Error::BadState)
+    pub async fn stop_write(&mut self) -> Result<(), Error> {
+        if self.state != State::Write {
+            return Err(Error::BadState);
         }
-    }
-
-    /// Get sd card back
-    pub fn take(&mut self) -> Option<SdCard<SPI, CS, DELAYER>> {
-        self.sd_card.take()
+        let mut inner = self.sd_card.inner.borrow_mut();
+        let res = inner.end_write().await;
+        self.state = State::Init;
+        res
     }
 }
 
@@ -443,13 +443,17 @@ where
             None => return Err(Error::CardNotFound),
         };
         self.cs_low()?;
-        self.card_command(CMD18, start_idx).await?;
-        Ok(())
+        let res = self.card_command(CMD18, start_idx).await.map(|_| ());
+        if res.is_err() {
+            self.cs_high()?;
+        }
+        res
     }
 
     async fn end_read(&mut self) -> Result<(), Error> {
-        self.card_command(CMD12, 0).await?;
-        self.cs_high()
+        let res = self.card_command(CMD12, 0).await.map(|_| ());
+        self.cs_high()?;
+        res
     }
 
     async fn read_inner(&mut self, blocks: &mut [Block], start_idx: u32) -> Result<(), Error> {
@@ -524,8 +528,13 @@ where
             None => return Err(Error::CardNotFound),
         };
         self.cs_low()?;
-        self.prepare_inner_multiblock_write(start_idx, blocks_length)
-            .await
+        let res = self
+            .prepare_inner_multiblock_write(start_idx, blocks_length)
+            .await;
+        if res.is_err() {
+            self.cs_high()?;
+        }
+        res
     }
 
     async fn prepare_inner_multiblock_write(
@@ -557,8 +566,9 @@ where
     }
 
     async fn end_write(&mut self) -> Result<(), Error> {
-        self.end_inner_multiblock_write().await?;
-        self.cs_high()
+        let res = self.end_inner_multiblock_write().await;
+        self.cs_high()?;
+        res
     }
 
     /// Write one or more blocks, starting at the given block index.
