@@ -56,6 +56,129 @@ impl embedded_hal::digital::OutputPin for DummyCsPin {
     }
 }
 
+#[derive(PartialEq)]
+enum State {
+    Init,
+    Read,
+    Write,
+}
+
+/// Represents an object which is able to read multiple blocks from the sd card
+pub struct SdCardMultiBlockWriteRead<SPI, CS, DELAYER>
+where
+    SPI: embedded_hal_async::spi::SpiDevice<u8>,
+    CS: embedded_hal::digital::OutputPin,
+    DELAYER: embedded_hal_async::delay::DelayNs,
+{
+    /// Sd card
+    pub sd_card: SdCard<SPI, CS, DELAYER>,
+    state: State,
+}
+
+impl<SPI, CS, DELAYER> SdCardMultiBlockWriteRead<SPI, CS, DELAYER>
+where
+    SPI: embedded_hal_async::spi::SpiDevice<u8>,
+    CS: embedded_hal::digital::OutputPin,
+    DELAYER: embedded_hal_async::delay::DelayNs,
+{
+    /// Create new object
+    pub fn new(sd_card: SdCard<SPI, CS, DELAYER>) -> Self {
+        Self {
+            sd_card,
+            state: State::Init,
+        }
+    }
+
+    /// Prepare reading from the sd card
+    pub async fn prepare_read(&mut self, start_block_idx: BlockIdx) -> Result<(), Error> {
+        let mut inner = self.sd_card.inner.borrow_mut();
+        inner.check_init().await?;
+        inner.prepare_read(start_block_idx).await?;
+        self.state = State::Read;
+        Ok(())
+    }
+
+    /// Reading next block
+    pub async fn read(&mut self, block: &mut [u8]) -> Result<(), Error> {
+        if self.state != State::Read {
+            return Err(Error::BadState);
+        }
+        let mut inner = self.sd_card.inner.borrow_mut();
+        let res = inner.read_data(block).await;
+        drop(inner);
+        if res.is_err() {
+            self.state = State::Init;
+            self.stop_read().await
+        } else {
+            res
+        }
+    }
+
+    /// Ending a multiblock read
+    /// IMPORTANT: This function must be called before destroying this object!
+    pub async fn stop_read(&mut self) -> Result<(), Error> {
+        if self.state != State::Read {
+            return Err(Error::BadState);
+        }
+        let mut inner = self.sd_card.inner.borrow_mut();
+        let res = inner.end_read().await;
+        self.state = State::Init;
+        res
+    }
+
+    /// Prepare writing to the sd card
+    pub async fn prepare_write(
+        &mut self,
+        start_block_idx: BlockIdx,
+        blocks_length: u32,
+    ) -> Result<(), Error> {
+        let mut inner = self.sd_card.inner.borrow_mut();
+        inner.check_init().await?;
+        inner.prepare_write(start_block_idx, blocks_length).await?;
+        self.state = State::Write;
+        Ok(())
+    }
+
+    /// Writing a single block
+    pub async fn write(&mut self, block: &[u8]) -> Result<(), Error> {
+        if self.state != State::Write {
+            return Err(Error::BadState);
+        }
+        let mut inner = self.sd_card.inner.borrow_mut();
+        let res = inner.write_inner_block(block).await;
+        drop(inner);
+        if res.is_err() {
+            self.state = State::Init;
+            self.stop_write().await
+        } else {
+            res
+        }
+    }
+
+    /// Ending a multiblock write
+    /// IMPORTANT: This function must be called before destroying this object!
+    pub async fn stop_write(&mut self) -> Result<(), Error> {
+        if self.state != State::Write {
+            return Err(Error::BadState);
+        }
+        let mut inner = self.sd_card.inner.borrow_mut();
+        let res = inner.end_write().await;
+        self.state = State::Init;
+        res
+    }
+}
+
+// Async drop not supported by rust!
+// impl<'a, SPI, CS, DELAYER> Drop for SdCardMultiBlockRead<'a, SPI, CS, DELAYER>
+// where
+//     SPI: embedded_hal_async::spi::SpiDevice<u8>,
+//     CS: embedded_hal::digital::OutputPin,
+//     DELAYER: embedded_hal_async::delay::DelayNs, {
+//     fn drop(&mut self) {
+//         self.stop().await
+//     }
+// }
+
 /// Represents an SD Card on an SPI bus.
 ///
 /// Built from an [`SpiDevice`] implementation and a Chip Select pin.
@@ -263,6 +386,26 @@ where
     CS: embedded_hal::digital::OutputPin,
     DELAYER: embedded_hal_async::delay::DelayNs,
 {
+    async fn prepare_read(&mut self, start_block_idx: BlockIdx) -> Result<(), Error> {
+        let start_idx = match self.card_type {
+            Some(CardType::SD1 | CardType::SD2) => start_block_idx.0 * 512,
+            Some(CardType::SDHC) => start_block_idx.0,
+            None => return Err(Error::CardNotFound),
+        };
+        self.cs_low()?;
+        let res = self.card_command(CMD18, start_idx).await.map(|_| ());
+        if res.is_err() {
+            self.cs_high()?;
+        }
+        res
+    }
+
+    async fn end_read(&mut self) -> Result<(), Error> {
+        let res = self.card_command(CMD12, 0).await.map(|_| ());
+        self.cs_high()?;
+        res
+    }
+
     async fn read_inner(&mut self, blocks: &mut [Block], start_idx: u32) -> Result<(), Error> {
         if blocks.len() == 1 {
             // Start a single-block read
@@ -307,25 +450,68 @@ where
                 return Err(Error::WriteError);
             }
         } else {
-            // > It is recommended using this command preceding CMD25, some of the cards will be faster for Multiple
-            // > Write Blocks operation. Note that the host should send ACMD23 just before WRITE command if the host
-            // > wants to use the pre-erased feature
-            self.card_acmd(ACMD23, blocks.len() as u32).await?;
-            // wait for card to be ready before sending the next command
-            self.wait_not_busy(Delay::new_write()).await?;
-
-            // Start a multi-block write
-            self.card_command(CMD25, start_idx).await?;
+            self.prepare_inner_multiblock_write(start_idx, blocks.len() as u32)
+                .await?;
             for block in blocks.iter() {
-                self.wait_not_busy(Delay::new_write()).await?;
-                self.write_data(WRITE_MULTIPLE_TOKEN, &block.contents)
-                    .await?;
+                self.write_inner_block(&block.contents).await?;
             }
-            // Stop the write
-            self.wait_not_busy(Delay::new_write()).await?;
-            self.write_byte(STOP_TRAN_TOKEN).await?;
+            self.end_inner_multiblock_write().await?
         }
         Ok(())
+    }
+
+    async fn prepare_write(
+        &mut self,
+        start_block_idx: BlockIdx,
+        blocks_length: u32,
+    ) -> Result<(), Error> {
+        let start_idx = match self.card_type {
+            Some(CardType::SD1 | CardType::SD2) => start_block_idx.0 * 512,
+            Some(CardType::SDHC) => start_block_idx.0,
+            None => return Err(Error::CardNotFound),
+        };
+        self.cs_low()?;
+        let res = self
+            .prepare_inner_multiblock_write(start_idx, blocks_length)
+            .await;
+        if res.is_err() {
+            self.cs_high()?;
+        }
+        res
+    }
+
+    async fn prepare_inner_multiblock_write(
+        &mut self,
+        start_idx: u32,
+        blocks_length: u32,
+    ) -> Result<(), Error> {
+        // > It is recommended using this command preceding CMD25, some of the cards will be faster for Multiple
+        // > Write Blocks operation. Note that the host should send ACMD23 just before WRITE command if the host
+        // > wants to use the pre-erased feature
+        self.card_acmd(ACMD23, blocks_length).await?;
+        // wait for card to be ready before sending the next command
+        self.wait_not_busy(Delay::new_write()).await?;
+
+        // Start a multi-block write
+        self.card_command(CMD25, start_idx).await?;
+        Ok(())
+    }
+
+    async fn write_inner_block(&mut self, block: &[u8]) -> Result<(), Error> {
+        self.wait_not_busy(Delay::new_write()).await?;
+        self.write_data(WRITE_MULTIPLE_TOKEN, block).await
+    }
+
+    async fn end_inner_multiblock_write(&mut self) -> Result<(), Error> {
+        // Stop the write
+        self.wait_not_busy(Delay::new_write()).await?;
+        self.write_byte(STOP_TRAN_TOKEN).await
+    }
+
+    async fn end_write(&mut self) -> Result<(), Error> {
+        let res = self.end_inner_multiblock_write().await;
+        self.cs_high()?;
+        res
     }
 
     /// Write one or more blocks, starting at the given block index.

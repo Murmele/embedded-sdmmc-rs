@@ -27,7 +27,7 @@ fn open_all_volumes() {
         Err(embedded_sdmmc::Error::VolumeAlreadyOpen)
     ));
 
-    volume_mgr.close_volume(fat16_volume).expect("close fat16");
+    tokio_test::block_on(volume_mgr.close_volume(fat16_volume)).expect("close fat16");
 
     // Open Volume 1
     let fat32_volume =
@@ -51,8 +51,8 @@ fn open_all_volumes() {
         Err(embedded_sdmmc::Error::TooManyOpenVolumes)
     ));
 
-    volume_mgr.close_volume(fat16_volume).expect("close fat16");
-    volume_mgr.close_volume(fat32_volume).expect("close fat32");
+    tokio_test::block_on(volume_mgr.close_volume(fat16_volume)).expect("close fat16");
+    tokio_test::block_on(volume_mgr.close_volume(fat32_volume)).expect("close fat32");
 
     // This isn't a valid volume
     assert!(matches!(
@@ -69,7 +69,7 @@ fn open_all_volumes() {
     let _root_dir = volume_mgr.open_root_dir(fat32_volume).expect("Open dir");
 
     assert!(matches!(
-        volume_mgr.close_volume(fat32_volume),
+        tokio_test::block_on(volume_mgr.close_volume(fat32_volume)),
         Err(embedded_sdmmc::Error::VolumeStillInUse)
     ));
 }
