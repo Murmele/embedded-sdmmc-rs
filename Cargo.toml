@@ -17,6 +17,7 @@ embedded-hal = { version = "1.0"}
 embedded-hal-async = { version = "1.0", default-features = false }
 heapless = "^0.8"
 log = {version = "0.4", default-features = false, optional = true}
+rtos-trace = { version = "0.1.2", optional = true }
 
 [dev-dependencies]
 chrono = "0.4"

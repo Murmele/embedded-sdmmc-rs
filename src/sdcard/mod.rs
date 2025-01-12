@@ -10,6 +10,54 @@ pub mod proto;
 use crate::{trace, Block, BlockCount, BlockDevice, BlockIdx};
 use core::cell::RefCell;
 use proto::*;
+#[cfg(feature = "rtos-trace")]
+use rtos_trace::trace;
+
+#[derive(Clone, Copy)]
+enum Markers {
+    SDCardRead = 7,
+    SDCardReadInnerCardCommand = 8,
+    SDCardReadInnerReadData = 9,
+    SDCardReadInnerTransferBuffer = 10,
+    SDCardReadInnerCardCommandWaitNotBusy = 11,
+    SDCardReadInnerCardCommandWriteInfo = 12,
+    SDCardReadInnerCardCommandWaitReady = 13,
+    SDCardReadInnerCardCommandWaitOk = 14,
+    SDCardReadInnerCardCommandWaitOkLoop = 15,
+    SDCardReadInnerCardCommandWaitOkLoopReadByte = 16,
+    SDCardReadInnerFirstFFByte = 17,
+    SDCardReadMultiblock = 18,
+}
+
+struct Marker {
+    #[cfg(feature = "rtos-trace")]
+    marker: Markers,
+}
+
+impl Marker {
+    #[allow(dead_code)]
+    pub fn new(_marker: Markers) -> Self {
+        #[cfg(feature = "rtos-trace")]
+        trace::marker_begin(_marker.into());
+        Marker {
+            #[cfg(feature = "rtos-trace")]
+            marker: _marker,
+        }
+    }
+}
+
+impl Drop for Marker {
+    fn drop(&mut self) {
+        #[cfg(feature = "rtos-trace")]
+        trace::marker_end(self.marker.into());
+    }
+}
+
+impl From<Markers> for u32 {
+    fn from(value: Markers) -> Self {
+        value as u32
+    }
+}
 
 // ****************************************************************************
 // Imports
@@ -72,6 +120,7 @@ where
 {
     /// Sd card
     pub sd_card: SdCard<SPI, CS, DELAYER>,
+    marker: Marker,
     state: State,
 }
 
@@ -85,6 +134,7 @@ where
     pub fn new(sd_card: SdCard<SPI, CS, DELAYER>) -> Self {
         Self {
             sd_card,
+            marker: Marker::new(Markers::SDCardReadMultiblock),
             state: State::Init,
         }
     }
@@ -409,8 +459,14 @@ where
     async fn read_inner(&mut self, blocks: &mut [Block], start_idx: u32) -> Result<(), Error> {
         if blocks.len() == 1 {
             // Start a single-block read
-            self.card_command(CMD17, start_idx).await?;
-            self.read_data(&mut blocks[0].contents).await?;
+            {
+                let _m = Marker::new(Markers::SDCardReadInnerCardCommand);
+                self.card_command(CMD17, start_idx).await?;
+            }
+            {
+                let _m = Marker::new(Markers::SDCardReadInnerReadData);
+                self.read_data(&mut blocks[0].contents).await?;
+            }
         } else {
             // Start a multi-block read
             self.card_command(CMD18, start_idx).await?;
@@ -425,6 +481,7 @@ where
 
     /// Read one or more blocks, starting at the given block index.
     async fn read(&mut self, blocks: &mut [Block], start_block_idx: BlockIdx) -> Result<(), Error> {
+        let _m = Marker::new(Markers::SDCardRead);
         let start_idx = match self.card_type {
             Some(CardType::SD1 | CardType::SD2) => start_block_idx.0 * 512,
             Some(CardType::SDHC) => start_block_idx.0,
@@ -610,6 +667,7 @@ where
         // Get first non-FF byte.
         let mut delay = Delay::new_read();
         let status = loop {
+            // let _m = Marker::new(Markers::SDCardReadInnerFirstFFByte);
             let s = self.read_byte().await?;
             if s != 0xFF {
                 break s;
@@ -625,7 +683,10 @@ where
         for b in buffer.iter_mut() {
             *b = 0xFF;
         }
-        self.transfer_bytes(buffer).await?;
+        {
+            // let _m = Marker::new(Markers::SDCardReadInnerTransferBuffer);
+            self.transfer_bytes(buffer).await?;
+        }
 
         // These two bytes are always sent. They are either a valid CRC, or
         // junk, depending on whether CRC mode was enabled.
@@ -787,6 +848,7 @@ where
     /// Perform a command.
     async fn card_command(&mut self, command: u8, arg: u32) -> Result<u8, Error> {
         if command != CMD0 && command != CMD12 {
+            // let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitNotBusy);
             self.wait_not_busy(Delay::new_command()).await?;
         }
 
@@ -800,22 +862,31 @@ where
         ];
         buf[5] = crc7(&buf[0..5]);
 
-        self.write_bytes(&buf).await?;
+        {
+            // let _m = Marker::new(Markers::SDCardReadInnerCardCommandWriteInfo);
+            self.write_bytes(&buf).await?;
+        }
 
         // skip stuff byte for stop read
+        // let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitReady);
         if command == CMD12 {
             let _result = self.read_byte().await?;
         }
 
         let mut delay = Delay::new_command();
+        // let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitOk);
         loop {
-            let result = self.read_byte().await?;
-            if (result & 0x80) == ERROR_OK {
-                return Ok(result);
+            // let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitOkLoop);
+            {
+                // let _m = Marker::new(Markers::SDCardReadInnerCardCommandWaitOkLoopReadByte);
+                let result = self.read_byte().await?;
+                if (result & 0x80) == ERROR_OK {
+                    return Ok(result);
+                }
+                delay
+                    .delay(&mut self.delayer, Error::TimeoutCommand(command))
+                    .await?;
             }
-            delay
-                .delay(&mut self.delayer, Error::TimeoutCommand(command))
-                .await?;
         }
     }
 
